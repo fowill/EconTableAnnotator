@@ -349,18 +349,47 @@ function App() {
     return [...projects].sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
   }, [projects]);
 
+  const normalizeHeader = (len: number) => ["row", ...Array.from({ length: len - 1 }, (_v, i) => `c${i + 1}`)];
+
+  const applyGridUpdate = (rows: string[][], headerLen: number) => {
+    const header = normalizeHeader(headerLen);
+    const fixedRows = rows.map((r, idx) => {
+      const row = [...r];
+      while (row.length < headerLen) row.push("");
+      return [String(idx + 1), ...row.slice(1, headerLen)];
+    });
+    setGridDraft(fixedRows);
+    setGridDirty(true);
+    setDetail((prev) => (prev ? { ...prev, grid: { ...prev.grid, header } } : prev));
+  };
+
   const removeColumn = (idx: number) => {
     if (idx === 0) return;
-    setGridDraft((prev) => prev.map((row) => row.filter((_, c) => c !== idx)));
-    if (detail) {
-      detail.grid.header = detail.grid.header.filter((_, c) => c !== idx);
-    }
-    setGridDirty(true);
+    const newRows = gridDraft.map((row) => row.filter((_, c) => c !== idx));
+    applyGridUpdate(newRows, Math.max(2, (detail?.grid.header.length || 1) - 1));
   };
 
   const removeRow = (ridx: number) => {
-    setGridDraft((prev) => prev.filter((_, i) => i !== ridx));
-    setGridDirty(true);
+    const newRows = gridDraft.filter((_, i) => i !== ridx);
+    applyGridUpdate(newRows, detail?.grid.header.length || (gridDraft[0]?.length ?? 1));
+  };
+
+  const insertColumnAt = (idx: number) => {
+    if (idx < 1) idx = 1;
+    const newRows = gridDraft.map((row) => {
+      const copy = [...row];
+      copy.splice(idx, 0, "");
+      return copy;
+    });
+    const headerLen = (detail?.grid.header.length || (gridDraft[0]?.length ?? 1)) + 1;
+    applyGridUpdate(newRows, headerLen);
+  };
+
+  const insertRowAt = (idx: number) => {
+    const headerLen = detail?.grid.header.length || (gridDraft[0]?.length ?? 1);
+    const emptyRow = Array.from({ length: headerLen }, () => "");
+    const newRows = [...gridDraft.slice(0, idx), emptyRow, ...gridDraft.slice(idx)];
+    applyGridUpdate(newRows, headerLen);
   };
 
   const runSuggest = async () => {
@@ -619,6 +648,24 @@ function App() {
                                     <div className="row" style={{ alignItems: "center", gap: 6 }}>
                                       <span>{displayName}</span>
                                       <button
+                                        className="mini-btn"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          insertColumnAt(idx);
+                                        }}
+                                      >
+                                        左插列
+                                      </button>
+                                      <button
+                                        className="mini-btn"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          insertColumnAt(idx + 1);
+                                        }}
+                                      >
+                                        右插列
+                                      </button>
+                                      <button
                                         className="mini-btn danger"
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -662,6 +709,13 @@ function App() {
                                         <div className="row row-labels">
                                           <span className="row-index">#{rowId}</span>
                                           <button
+                                            className="mini-btn"
+                                            onClick={() => insertRowAt(ridx)}
+                                            title="在当前行上方插入"
+                                          >
+                                            上插行
+                                          </button>
+                                          <button
                                             className={`mini-btn ${x ? "active" : ""}`}
                                             onClick={() => toggleXRow(rowId, row[1] || "")}
                                             title="标注为 X 行"
@@ -695,6 +749,13 @@ function App() {
                                             title="删除该行"
                                           >
                                             删行
+                                          </button>
+                                          <button
+                                            className="mini-btn"
+                                            onClick={() => insertRowAt(ridx + 1)}
+                                            title="在当前行下方插入"
+                                          >
+                                            下插行
                                           </button>
                                         </div>
                                       ) : (

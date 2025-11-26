@@ -4,7 +4,7 @@
   "grid_file": "mnsc_2023_03369_table2.csv",
   "image_file": "mnsc_2023_03369_table2.png",
   "status": "done",
-  "bracket_type_default": "unknown",
+  "bracket_type_default": "std_err",
   "bracket_type_overrides": {},
   "y_columns": [],
   "x_rows": [
@@ -35,5 +35,5 @@
     "cols": {},
     "cells": {}
   },
-  "last_modified": "2025-11-26T12:51:44.902166"
+  "last_modified": "2025-11-26T12:54:20.424778"
 }
