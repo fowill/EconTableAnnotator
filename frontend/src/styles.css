@@ -128,7 +128,7 @@ a {
 }
 
 .cell-input {
-  width: 100%;
+  width: 160px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   padding: 4px 6px;
@@ -255,12 +255,13 @@ a {
 
 .small-inputs {
   display: flex;
-  gap: 6px;
-  margin-top: 4px;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
 }
 
 .small-inputs input {
-  width: 120px;
+  width: 160px;
   padding: 4px 6px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
@@ -314,6 +315,15 @@ a {
 
 .preview-obs td {
   background: #fef9c3;
+}
+
+.table-scroll {
+  overflow: auto;
+  cursor: grab;
+}
+
+.table-scroll:active {
+  cursor: grabbing;
 }
 
 .input.slim {

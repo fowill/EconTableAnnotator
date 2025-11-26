@@ -1,5 +1,4 @@
-
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchProjects,
   fetchTableDetail,
@@ -20,14 +19,40 @@ type MenuState = { type: "row" | "col"; index: number; x: number; y: number } | 
 
 const statusBadge = (status: string) => {
   const normalized = status?.toLowerCase();
-  if (normalized === "done") return <span className="badge green">完成</span>;
-  if (normalized === "in_progress") return <span className="badge amber">进行中</span>;
-  return <span className="badge gray">未开始</span>;
+  if (normalized === "done") return <span className="badge green">done</span>;
+  if (normalized === "in_progress") return <span className="badge amber">in progress</span>;
+  return <span className="badge gray">not started</span>;
 };
 
 const getRowId = (row: string[], idx: number) => {
   const maybe = parseInt(row[0], 10);
   return Number.isFinite(maybe) ? maybe : idx + 1;
+};
+
+const useDragScroll = () => {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const drag = useRef({ active: false, startX: 0, scrollLeft: 0 });
+
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest("input,textarea,button,select")) return;
+    if (!ref.current) return;
+    drag.current = { active: true, startX: e.clientX, scrollLeft: ref.current.scrollLeft };
+    ref.current.classList.add("dragging");
+    e.preventDefault();
+  };
+
+  const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!drag.current.active || !ref.current) return;
+    const dx = e.clientX - drag.current.startX;
+    ref.current.scrollLeft = drag.current.scrollLeft - dx;
+  };
+
+  const stop = () => {
+    drag.current.active = false;
+    ref.current?.classList.remove("dragging");
+  };
+
+  return { ref, onMouseDown, onMouseMove, onMouseUp: stop, onMouseLeave: stop };
 };
 
 function App() {
@@ -63,6 +88,9 @@ function App() {
 
   const [menu, setMenu] = useState<MenuState>(null);
 
+  const editScroll = useDragScroll();
+  const previewScroll = useDragScroll();
+
   useEffect(() => {
     getConfig()
       .then((cfg) => {
@@ -72,6 +100,7 @@ function App() {
       })
       .catch(() => {});
   }, []);
+
   const loadProjects = async () => {
     setLoading(true);
     setError(null);
@@ -84,7 +113,7 @@ function App() {
       const list = await fetchProjects(rootDir);
       setProjects(list);
     } catch (err: any) {
-      setError(err.message || "加载失败");
+      setError(err.message || "load failed");
     } finally {
       setLoading(false);
     }
@@ -96,7 +125,7 @@ function App() {
       setProjects(list);
       return list;
     } catch (err: any) {
-      setError(err.message || "加载失败");
+      setError(err.message || "load failed");
       return projects;
     }
   };
@@ -115,7 +144,7 @@ function App() {
       setGridDraft(data.grid.rows.map((r) => [...r]));
       setSkeletonDraft(structuredClone(data.skeleton));
     } catch (err: any) {
-      setDetailError(err.message || "加载失败");
+      setDetailError(err.message || "load failed");
     }
   };
 
@@ -132,6 +161,7 @@ function App() {
     });
     setGridDirty(true);
   };
+
   const saveAll = async (andNext?: boolean) => {
     if (!detail || !skeletonDraft) return;
     setSavingCsv(true);
@@ -143,7 +173,7 @@ function App() {
         rows: gridDraft
       });
       await saveSkeleton(detail.info.paper_id, detail.info.table_id, rootDir, skeletonDraft);
-      setSaveMsg(andNext ? "已保存，跳转中..." : "已保存全部");
+      setSaveMsg(andNext ? "saved, jumping..." : "saved all");
       setGridDirty(false);
       setSkeletonDirty(false);
       if (andNext) {
@@ -158,11 +188,11 @@ function App() {
           await openDetail(next);
           setEditMode(true);
         } else {
-          setSaveMsg("已保存，暂无未完成任务");
+          setSaveMsg("saved, no more pending items");
         }
       }
     } catch (err: any) {
-      setSaveMsg(err.message || "保存失败");
+      setSaveMsg(err.message || "save failed");
     } finally {
       setSavingCsv(false);
       setSavingSkeleton(false);
@@ -262,6 +292,7 @@ function App() {
       return s;
     });
   };
+
   const updateStatusOnly = async (status: "done" | "in_progress") => {
     if (!detail || !skeletonDraft) return;
     setSavingSkeleton(true);
@@ -273,7 +304,7 @@ function App() {
       setDetail((prev) => (prev ? { ...prev, skeleton: { ...prev.skeleton, status } } : prev));
       setSelected((prev) => (prev ? { ...prev, status } : prev));
       const list = await refreshProjects();
-      setSaveMsg(status === "done" ? "已标记为完成" : "已标记为未完成");
+      setSaveMsg(status === "done" ? "marked done" : "marked in-progress");
       setGridDirty(false);
       setSkeletonDirty(false);
       if (status === "done") {
@@ -287,11 +318,11 @@ function App() {
           await openDetail(next);
           setEditMode(true);
         } else {
-          setSaveMsg("已标记完成，暂无未完成任务");
+          setSaveMsg("marked done, no next item");
         }
       }
     } catch (err: any) {
-      setSaveMsg(err.message || "保存失败");
+      setSaveMsg(err.message || "save failed");
     } finally {
       setSavingSkeleton(false);
     }
@@ -300,14 +331,14 @@ function App() {
   const attemptJump = async (item: TableListItem) => {
     const dirty = gridDirty || skeletonDirty;
     if (selected && dirty) {
-      const ok = window.confirm("有未保存的改动，是否保存后跳转？取消则留在当前页面。");
+      const ok = window.confirm("Unsaved changes. Save and jump?");
       if (!ok) return;
       try {
         if (detail) {
           await saveAll(false);
         }
       } catch (e) {
-        setSaveMsg("保存失败，未跳转");
+        setSaveMsg("save failed, stay on page");
         return;
       }
     }
@@ -368,15 +399,15 @@ function App() {
     if (!detail) return;
     setSuggestLoading(true);
     setSaveMsg(null);
-    setLlmStatus("LLM 请求中...");
+    setLlmStatus("LLM requesting...");
     try {
       const rows = await suggestGrid(detail.info.paper_id, detail.info.table_id, rootDir, suggestInstruction);
       setSuggestedRows(rows);
-      setSaveMsg("已生成 LLM 建议，可选择 Accept 或 Reject");
-      setLlmStatus("已生成建议，等待确认");
+      setSaveMsg("LLM draft ready, confirm apply");
+      setLlmStatus("draft ready, waiting confirm");
     } catch (err: any) {
-      setSaveMsg(err.message || "LLM 建议失败");
-      setLlmStatus(`LLM 失败: ${err.message || ""}`);
+      setSaveMsg(err.message || "LLM failed");
+      setLlmStatus(`LLM failed: ${err.message || ""}`);
     } finally {
       setSuggestLoading(false);
     }
@@ -387,193 +418,190 @@ function App() {
     setGridDraft(suggestedRows);
     setGridDirty(true);
     setSuggestedRows(null);
-    setSaveMsg("已应用 LLM 建议，请保存");
-    setLlmStatus("已应用建议，记得保存");
+    setSaveMsg("LLM applied, please save");
+    setLlmStatus("draft applied, remember to save");
   };
 
   const rejectSuggest = () => {
     setSuggestedRows(null);
-    setSaveMsg("已拒绝 LLM 建议");
-    setLlmStatus("已拒绝建议");
+    setSaveMsg("LLM draft rejected");
+    setLlmStatus("draft rejected");
   };
 
   const saveConfig = async () => {
     try {
-      const res = await updateConfig({
-        root_dir: rootDir,
-        openai_base_url: baseUrl || null,
-        openai_api_key: apiKey ? apiKey : undefined
-      });
-      setRootDir(res.root_dir || rootDir);
-      setBaseUrl(res.openai_base_url || "");
-      setApiKeySet(Boolean(res.openai_api_key_set));
-      if (apiKey) setApiKey("");
-      setSaveMsg("配置已保存");
-    } catch (err: any) {
-      setSaveMsg(err.message || "配置保存失败");
-    }
-  };
-
-  const forgetApiKey = async () => {
-    try {
-      const res = await updateConfig({
-        root_dir: rootDir,
-        openai_base_url: baseUrl || null,
-        openai_api_key: ""
-      });
+      await updateConfig({ root_dir: rootDir, openai_base_url: baseUrl, openai_api_key: apiKey || undefined });
+      setApiKeySet(Boolean(apiKey));
       setApiKey("");
-      setApiKeySet(Boolean(res.openai_api_key_set));
-      setSaveMsg("已清除 API Key");
+      setSaveMsg("config saved");
     } catch (err: any) {
-      setSaveMsg(err.message || "清除失败");
+      setSaveMsg(err.message || "config save failed");
     }
   };
 
-  const isYCol = (col: number) => skeletonDraft?.y_columns.some((c) => c.col === col);
+  const isYCol = (col: number) => Boolean(skeletonDraft?.y_columns.find((c) => c.col === col));
   const yCol = (col: number) => skeletonDraft?.y_columns.find((c) => c.col === col);
   const xRow = (row: number) => skeletonDraft?.x_rows.find((r) => r.row === row);
-  const isFERow = (row: number) => skeletonDraft?.fe_rows.some((r) => r.row === row);
-  const isObsRow = (row: number) => skeletonDraft?.obs_rows.some((r) => r.row === row);
+  const isFERow = (row: number) => Boolean(skeletonDraft?.fe_rows.find((r) => r.row === row));
+  const isObsRow = (row: number) => Boolean(skeletonDraft?.obs_rows.find((r) => r.row === row));
 
   const saving = savingCsv || savingSkeleton;
+
+  // UI section continues below
   return (
     <div className="page" onClick={() => setMenu(null)}>
-      <h1 style={{ margin: 0 }}>Econ Table Annotator</h1>
-      <p style={{ margin: 0, opacity: 0.8 }}>
-        本地标注站：左看图片，右修 CSV / Skeleton。先加载项目列表，再点选表格进入标注模式。
-      </p>
+      <header style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <h1 style={{ margin: 0 }}>Econ Table Annotator</h1>
+        <div style={{ color: "#374151" }}>Local annotator: left image, right CSV/Skeleton.</div>
+      </header>
 
-      {!editMode && (
-        <div className="card">
-          <div className="row" style={{ alignItems: "flex-end" }}>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <label style={{ fontSize: 12, color: "#6b7280" }}>root_dir</label>
-              <input
-                className="input"
-                placeholder="后端可访问的目录"
-                value={rootDir}
-                onChange={(e) => setRootDir(e.target.value)}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={{ fontSize: 12, color: "#6b7280" }}>OpenAI Base URL (可选)</label>
-              <input
-                className="input"
-                placeholder="如 https://api.shubiaobiao.cn/v1/"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={{ fontSize: 12, color: "#6b7280" }}>
-                API Key {apiKeySet ? "（已设置）" : ""}
-              </label>
-              {!apiKeySet ? (
-                <input
-                  className="input"
-                  placeholder="sk-..."
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  type="password"
-                />
-              ) : (
-                <div style={{ fontSize: 13, color: "#065f46" }}>已设置，除非更换无需再次填写</div>
-              )}
-            </div>
-            <button className="button" onClick={saveConfig} style={{ height: 42 }}>
-              保存配置
+      <div className="card">
+        <div className="row" style={{ alignItems: "center" }}>
+          <input
+            className="input"
+            placeholder="root_dir (csv / images / skeleton)"
+            value={rootDir}
+            onChange={(e) => setRootDir(e.target.value)}
+          />
+          <input
+            className="input"
+            placeholder="OpenAI Base URL (optional)"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+          />
+          {!apiKeySet && (
+            <input
+              className="input"
+              placeholder="OpenAI API Key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+          )}
+          <button className="button secondary" onClick={saveConfig}>
+            save config
+          </button>
+          {apiKeySet && (
+            <button
+              className="button secondary"
+              onClick={() => {
+                setApiKey("");
+                setApiKeySet(false);
+                updateConfig({ openai_api_key: "" });
+              }}
+            >
+              forget API Key
             </button>
-            <button className="button secondary" onClick={forgetApiKey} style={{ height: 42 }}>
-              忘记 API Key
-            </button>
-            <button className="button" onClick={loadProjects} disabled={loading} style={{ height: 42 }}>
-              {loading ? "加载中..." : "加载项目"}
-            </button>
-          </div>
-          {error && <div style={{ color: "#b91c1c", marginTop: 8 }}>{error}</div>}
+          )}
+          <button className="button" onClick={loadProjects} disabled={loading}>
+            {loading ? "loading..." : "load projects"}
+          </button>
+        </div>
+        {error && <div style={{ color: "#b91c1c", marginTop: 6 }}>{error}</div>}
+      </div>
+
+      <div className="card">
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Projects</div>
+        <div className="grid-preview" style={{ maxHeight: 280 }}>
           <table className="table">
             <thead>
               <tr>
-                <th style={{ width: 120 }}>paper_id</th>
-                <th style={{ width: 80 }}>table_id</th>
+                <th>paper_id</th>
+                <th>table_id</th>
                 <th>csv</th>
-                <th style={{ width: 140 }}>状态</th>
-                <th style={{ width: 160 }}>操作</th>
+                <th>status</th>
+                <th>actions</th>
               </tr>
             </thead>
             <tbody>
-              {projects.map((item) => (
-                <tr
-                  key={`${item.paper_id}-${item.table_id}`}
-                  onClick={() => openDetail(item)}
-                  style={{ cursor: "pointer", background: selected === item ? "#eef2ff" : "transparent" }}
-                >
+              {sortedProjects.map((item) => (
+                <tr key={`${item.paper_id}-${item.table_id}`}>
                   <td>{item.paper_id}</td>
                   <td>{item.table_id}</td>
-                  <td style={{ fontSize: 12, opacity: 0.8 }}>{item.csv_path}</td>
+                  <td>{item.csv_path}</td>
                   <td>{statusBadge(item.status)}</td>
                   <td>
-                    <button
-                      className="mini-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (selected?.paper_id === item.paper_id && selected?.table_id === item.table_id) {
-                          updateStatusOnly("done");
-                        } else {
-                          openDetail(item).then(() => updateStatusOnly("done"));
-                        }
-                      }}
-                    >
-                      标记完成
-                    </button>
-                    <button
-                      className="mini-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (selected?.paper_id === item.paper_id && selected?.table_id === item.table_id) {
-                          updateStatusOnly("in_progress");
-                        } else {
-                          openDetail(item).then(() => updateStatusOnly("in_progress"));
-                        }
-                      }}
-                    >
-                      标记未完成
-                    </button>
+                    <div className="row" style={{ gap: 6 }}>
+                      <button
+                        className="button secondary"
+                        onClick={() => {
+                          openDetail(item).then(() => setEditMode(true));
+                        }}
+                      >
+                        edit
+                      </button>
+                      <button
+                        className="button secondary"
+                        onClick={() => {
+                          openDetail(item).then(() => setEditMode(false));
+                        }}
+                      >
+                        view
+                      </button>
+                      <button
+                        className="button secondary"
+                        onClick={() => {
+                          if (detail && item.paper_id === detail.info.paper_id && item.table_id === detail.info.table_id) {
+                            updateStatusOnly("done");
+                          } else {
+                            openDetail(item).then(() => updateStatusOnly("done"));
+                          }
+                        }}
+                      >
+                        mark done
+                      </button>
+                      <button
+                        className="button secondary"
+                        onClick={() => {
+                          if (detail && item.paper_id === detail.info.paper_id && item.table_id === detail.info.table_id) {
+                            updateStatusOnly("in_progress");
+                          } else {
+                            openDetail(item).then(() => updateStatusOnly("in_progress"));
+                          }
+                        }}
+                      >
+                        mark in-progress
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      )}
+      </div>
+
       {selected && (
         <div className="card">
           <div className="row" style={{ alignItems: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>
+            <div style={{ fontWeight: 700, fontSize: 18 }}>
               {selected.paper_id} / {selected.table_id}
             </div>
             <div>{statusBadge(selected.status)}</div>
             <div style={{ flex: 1 }} />
             {detail && (
-              <button className="button secondary" onClick={() => setEditMode((v) => !v)}>
-                {editMode ? "退出编辑" : "进入编辑"}
-              </button>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="button secondary" onClick={() => setEditMode((v) => !v)}>
+                  {editMode ? "switch to preview" : "edit"}
+                </button>
+                <button className="button secondary" onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>
+                  zoom out
+                </button>
+                <button className="button secondary" onClick={() => setZoom((z) => z + 0.1))}>
+                  zoom in
+                </button>
+                <button className="button secondary" onClick={() => setShowImageModal(true)}>
+                  open full image
+                </button>
+              </div>
             )}
-            {!editMode && (
-              <button className="button secondary" onClick={loadProjects}>
-                返回列表
-              </button>
-            )}
-            <button className="button secondary" onClick={() => setSelected(null)}>
-              关闭
-            </button>
           </div>
-          {detailError && <div style={{ color: "#b91c1c", marginTop: 8 }}>{detailError}</div>}
+
+          {detailError && <div style={{ color: "#b91c1c" }}>{detailError}</div>}
 
           {detail ? (
-            <div className="row edit-shell vertical">
+            <div className="row edit-shell vertical" style={{ alignItems: "stretch" }}>
               <div className="status-rail">
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>任务</div>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>All tables</div>
                 <div className="status-list">
                   {sortedProjects.map((p) => (
                     <div
@@ -593,366 +621,360 @@ function App() {
                 </div>
               </div>
 
-              <div className="image-panel">
-                <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ fontWeight: 700 }}>图片预览</div>
-                  <div className="row" style={{ alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>缩放</span>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="2"
-                      step="0.05"
-                      value={zoom}
-                      onChange={(e) => setZoom(Number(e.target.value))}
-                    />
-                    <span style={{ fontSize: 12, color: "#6b7280", width: 40 }}>{Math.round(zoom * 100)}%</span>
-                    <button className="button secondary" onClick={() => setShowImageModal(true)}>
-                      查看大图
-                    </button>
-                  </div>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div className="image-panel">
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Image</div>
+                  {imageSrc ? (
+                    <div className="image-container">
+                      <img className="image-preview" style={{ transform: `scale(${zoom})` }} src={imageSrc} alt="table" />
+                    </div>
+                  ) : (
+                    <div style={{ color: "#d97706" }}>No image found</div>
+                  )}
                 </div>
-                {selected.image_path ? (
-                  <div className="image-container">
-                    <img className="image-preview" style={{ transform: `scale(${zoom})` }} src={imageSrc} alt="table" />
-                  </div>
-                ) : (
-                  <div style={{ color: "#d97706" }}>没有找到配套图片</div>
-                )}
-              </div>
-              <div className="edit-panel">
-                {editMode ? (
-                  <>
-                    <div className="grid-preview" style={{ maxHeight: 520 }}>
-                      <div style={{ fontWeight: 700, marginBottom: 6 }}>可编辑 CSV + 点选标注</div>
-                      <div style={{ overflowX: "auto" }}>
-                        <table className="table annotate-table">
-                          <thead>
-                            <tr>
-                              {detail.grid.header.map((col, idx) => {
-                                const displayName = idx === 0 ? "row" : `c${idx}`;
-                                const colNum = idx;
-                                const active = idx !== 0 && isYCol(colNum);
-                                return (
-                                  <th
-                                    key={idx}
-                                    className={active ? "highlight" : ""}
-                                    onClick={() => {
-                                      if (idx !== 0) toggleYCol(colNum);
-                                    }}
-                                    onContextMenu={(e) => {
-                                      e.preventDefault();
-                                      if (idx === 0) return;
-                                      setMenu({ type: "col", index: idx, x: e.clientX, y: e.clientY });
-                                    }}
-                                    title={idx === 0 ? "行编号" : "点击标注/取消为 Y 列，右键更多操作"}
-                                  >
-                                    <div className="col-header">
-                                      {idx > 0 && (
-                                        <button
-                                          className="gap-add danger"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            removeColumn(idx);
-                                          }}
-                                        >
-                                          -
-                                        </button>
-                                      )}
-                                      <span>{displayName}</span>
-                                      {idx > 0 && (
-                                        <button
-                                          className="gap-add"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            insertColumnAt(idx + 1);
-                                          }}
-                                        >
-                                          +
-                                        </button>
-                                      )}
-                                    </div>
-                                    {active && (
-                                      <div className="small-inputs" onClick={(e) => e.stopPropagation()}>
-                                        <input
-                                          placeholder="depvar_label"
-                                          value={yCol(colNum)?.depvar_label || ""}
-                                          onChange={(e) => updateYField(colNum, "depvar_label", e.target.value)}
-                                        />
-                                        <input
-                                          placeholder="data_var_name"
-                                          value={yCol(colNum)?.depvar_data_name || ""}
-                                          onChange={(e) => updateYField(colNum, "depvar_data_name", e.target.value)}
-                                        />
-                                      </div>
-                                    )}
-                                  </th>
-                                );
-                              })}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {gridDraft.map((row, ridx) => {
-                              const rowId = getRowId(row, ridx);
-                              const x = xRow(rowId);
-                              const fe = isFERow(rowId);
-                              const obs = isObsRow(rowId);
-                              const isCore = x?.role === "key";
-                              return (
-                                <tr key={ridx} className={x || fe || obs ? "highlight-row" : ""}>
-                                  {row.map((cell, cidx) => (
-                                    <td key={cidx}>
-                                      {cidx === 0 ? (
-                                        <div className="row row-labels">
-                                          <span className="row-index">#{rowId}</span>
+
+                <div className="edit-panel">
+                  {editMode ? (
+                    <>
+                      <div className="grid-preview" style={{ maxHeight: 520 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 6 }}>Editable CSV + annotations</div>
+                        <div
+                          className="table-scroll"
+                          ref={editScroll.ref}
+                          onMouseDown={editScroll.onMouseDown}
+                          onMouseMove={editScroll.onMouseMove}
+                          onMouseUp={editScroll.onMouseUp}
+                          onMouseLeave={editScroll.onMouseLeave}
+                        >
+                          <table className="table annotate-table">
+                            <thead>
+                              <tr>
+                                {detail.grid.header.map((_, idx) => {
+                                  const displayName = idx === 0 ? "row" : `c${idx}`;
+                                  const colNum = idx;
+                                  const active = idx !== 0 && isYCol(colNum);
+                                  return (
+                                    <th
+                                      key={idx}
+                                      className={active ? "highlight" : ""}
+                                      onClick={() => {
+                                        if (idx !== 0) toggleYCol(colNum);
+                                      }}
+                                      onContextMenu={(e) => {
+                                        e.preventDefault();
+                                        if (idx === 0) return;
+                                        setMenu({ type: "col", index: idx, x: e.clientX, y: e.clientY });
+                                      }}
+                                      title={idx === 0 ? "row" : "Toggle Y column; right-click insert"}
+                                    >
+                                      <div className="col-header">
+                                        {idx > 0 && (
                                           <button
                                             className="gap-add danger"
-                                            onClick={() => removeRow(ridx)}
-                                            title="删除该行"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              removeColumn(idx);
+                                            }}
                                           >
                                             -
                                           </button>
-                                          <button
-                                            className={`mini-btn ${x ? "active" : ""}`}
-                                            onClick={() => toggleXRow(rowId, row[1] || "")}
-                                            title="标注为 X 行"
-                                          >
-                                            X
-                                          </button>
-                                          <button
-                                            className={`mini-btn ${isCore ? "active core" : ""}`}
-                                            onClick={() => setCoreRow(rowId, row[1] || "")}
-                                            title="标注为核心 X"
-                                          >
-                                            核心
-                                          </button>
-                                          <button
-                                            className={`mini-btn ${fe ? "active" : ""}`}
-                                            onClick={() => toggleFERow(rowId, row[1] || "FE")}
-                                            title="标注为 FE 行"
-                                          >
-                                            FE
-                                          </button>
-                                          <button
-                                            className={`mini-btn ${obs ? "active" : ""}`}
-                                            onClick={() => toggleObsRow(rowId, row[1] || "N")}
-                                            title="标注为 N/Obs 行"
-                                          >
-                                            N
-                                          </button>
+                                        )}
+                                        <span>{displayName}</span>
+                                        {idx > 0 && (
                                           <button
                                             className="gap-add"
-                                            onClick={() => insertRowAt(ridx + 1)}
-                                            title="在当前行下方插入"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              insertColumnAt(idx + 1);
+                                            }}
                                           >
                                             +
                                           </button>
+                                        )}
+                                      </div>
+                                      {active && (
+                                        <div className="small-inputs" onClick={(e) => e.stopPropagation()}>
+                                          <input
+                                            placeholder="depvar_label"
+                                            value={yCol(colNum)?.depvar_label || ""}
+                                            onChange={(e) => updateYField(colNum, "depvar_label", e.target.value)}
+                                          />
+                                          <input
+                                            placeholder="data_var_name"
+                                            value={yCol(colNum)?.depvar_data_name || ""}
+                                            onChange={(e) => updateYField(colNum, "depvar_data_name", e.target.value)}
+                                          />
                                         </div>
-                                      ) : (
-                                        <input
-                                          className="cell-input"
-                                          value={cell}
-                                          onChange={(e) => onCellChange(ridx, cidx, e.target.value)}
-                                        />
                                       )}
-                                    </td>
-                                  ))}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    <div className="card" style={{ marginTop: 10 }}>
-                      <div style={{ fontWeight: 700, marginBottom: 8 }}>X 行详情</div>
-                      {skeletonDraft?.x_rows.map((r) => (
-                        <div className="row" key={r.row} style={{ marginBottom: 8 }}>
-                          <span style={{ width: 60 }}>Row {r.row}</span>
-                          <input
-                            className="input slim"
-                            placeholder="display_label"
-                            value={r.display_label || ""}
-                            onChange={(e) => updateXField(r.row, "display_label", e.target.value)}
-                          />
-                          <input
-                            className="input slim"
-                            placeholder="data_var_name"
-                            value={r.data_var_name || ""}
-                            onChange={(e) => updateXField(r.row, "data_var_name", e.target.value)}
-                          />
-                          <select
-                            className="input slim"
-                            value={r.role}
-                            onChange={(e) => updateXField(r.row, "role", e.target.value)}
-                          >
-                            <option value="key">key(核心)</option>
-                            <option value="control">control</option>
-                            <option value="interaction">interaction</option>
-                            <option value="other">other</option>
-                          </select>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="card" style={{ marginTop: 10 }}>
-                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Y 列标注</div>
-                      {detail.grid.header
-                        .map((_, idx) => idx)
-                        .filter((idx) => idx > 0)
-                        .map((idx) => {
-                          const active = isYCol(idx);
-                          return (
-                            <div className="row" key={idx} style={{ marginBottom: 8, alignItems: "center", gap: 8 }}>
-                              <label style={{ minWidth: 60 }}>
-                                <input
-                                  type="checkbox"
-                                  checked={active}
-                                  onChange={() => toggleYCol(idx)}
-                                  style={{ marginRight: 6 }}
-                                />
-                                列 c{idx}
-                              </label>
-                              {active && (
-                                <>
-                                  <input
-                                    className="input slim"
-                                    placeholder="depvar_label"
-                                    value={yCol(idx)?.depvar_label || ""}
-                                    onChange={(e) => updateYField(idx, "depvar_label", e.target.value)}
-                                  />
-                                  <input
-                                    className="input slim"
-                                    placeholder="data_var_name"
-                                    value={yCol(idx)?.depvar_data_name || ""}
-                                    onChange={(e) => updateYField(idx, "depvar_data_name", e.target.value)}
-                                  />
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
-                    </div>
-                    {suggestedRows && (
-                      <div className="card" style={{ marginTop: 10 }}>
-                        <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
-                          <div style={{ fontWeight: 700 }}>LLM 建议预览（未应用）</div>
-                          <div className="row" style={{ gap: 8 }}>
-                            <button className="button secondary" onClick={acceptSuggest}>
-                              Accept
-                            </button>
-                            <button className="button secondary" onClick={rejectSuggest}>
-                              Reject
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid-preview" style={{ maxHeight: 240 }}>
-                          <table className="table">
+                                    </th>
+                                  );
+                                })}
+                              </tr>
+                            </thead>
                             <tbody>
-                              {suggestedRows.slice(0, 6).map((row, idx) => (
-                                <tr key={idx}>
-                                  {row.map((cell, cidx) => (
-                                    <td key={cidx}>{cell}</td>
-                                  ))}
-                                </tr>
-                              ))}
+                              {gridDraft.map((row, ridx) => {
+                                const rowId = getRowId(row, ridx);
+                                const x = xRow(rowId);
+                                const fe = isFERow(rowId);
+                                const obs = isObsRow(rowId);
+                                const isCore = x?.role === "key";
+                                return (
+                                  <tr key={ridx} className={x || fe || obs ? "highlight-row" : ""}>
+                                    {row.map((cell, cidx) => (
+                                      <td key={cidx}>
+                                        {cidx === 0 ? (
+                                          <div className="row row-labels">
+                                            <span className="row-index">#{rowId}</span>
+                                            <button className="gap-add danger" onClick={() => removeRow(ridx)} title="delete row">
+                                              -
+                                            </button>
+                                            <button
+                                              className={`mini-btn ${x ? "active" : ""}`}
+                                              onClick={() => toggleXRow(rowId, row[1] || "")}
+                                              title="mark as X row"
+                                            >
+                                              X
+                                            </button>
+                                            <button
+                                              className={`mini-btn ${isCore ? "active core" : ""}`}
+                                              onClick={() => setCoreRow(rowId, row[1] || "")}
+                                              title="mark as core X"
+                                            >
+                                              core
+                                            </button>
+                                            <button
+                                              className={`mini-btn ${fe ? "active" : ""}`}
+                                              onClick={() => toggleFERow(rowId, row[1] || "FE")}
+                                              title="mark as FE row"
+                                            >
+                                              FE
+                                            </button>
+                                            <button
+                                              className={`mini-btn ${obs ? "active" : ""}`}
+                                              onClick={() => toggleObsRow(rowId, row[1] || "N")}
+                                              title="mark as N/Obs row"
+                                            >
+                                              N
+                                            </button>
+                                            <button className="gap-add" onClick={() => insertRowAt(ridx + 1)} title="insert below">
+                                              +
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <input
+                                            className="cell-input"
+                                            value={cell}
+                                            onChange={(e) => onCellChange(ridx, cidx, e.target.value)}
+                                          />
+                                        )}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
                       </div>
-                    )}
 
-                    <div className="action-bar">
-                      <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        <button className="button big" onClick={() => saveAll(false)} disabled={saving}>
-                          {saving ? "保存中..." : "保存全部"}
-                        </button>
-                        <button className="button big secondary" onClick={() => saveAll(true)} disabled={saving}>
-                          {saving ? "保存中..." : "保存并跳到下一条"}
-                        </button>
-                        <button className="button secondary" onClick={() => updateStatusOnly("done")} disabled={saving}>
-                          标记完成
-                        </button>
-                        <button className="button secondary" onClick={() => updateStatusOnly("in_progress")} disabled={saving}>
-                          标记未完成
-                        </button>
-                        <input
-                          className="input slim"
-                          style={{ minWidth: 200 }}
-                          placeholder="给 LLM 的补充指令（可选）"
-                          value={suggestInstruction}
-                          onChange={(e) => setSuggestInstruction(e.target.value)}
-                        />
-                        <button className="button secondary" onClick={runSuggest} disabled={suggestLoading}>
-                          {suggestLoading ? "LLM 填充中..." : "LLM 填充建议"}
-                        </button>
-                        {saveMsg && <span style={{ color: "#0f5132" }}>{saveMsg}</span>}
-                        {llmStatus && <span style={{ color: "#b45309" }}>{llmStatus}</span>}
+                      <div className="card" style={{ marginTop: 10 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>X rows detail</div>
+                        {skeletonDraft?.x_rows.map((r) => (
+                          <div className="row" key={r.row} style={{ marginBottom: 8 }}>
+                            <span style={{ width: 60 }}>Row {r.row}</span>
+                            <input
+                              className="input slim"
+                              placeholder="display_label"
+                              value={r.display_label || ""}
+                              onChange={(e) => updateXField(r.row, "display_label", e.target.value)}
+                            />
+                            <input
+                              className="input slim"
+                              placeholder="data_var_name"
+                              value={r.data_var_name || ""}
+                              onChange={(e) => updateXField(r.row, "data_var_name", e.target.value)}
+                            />
+                            <select
+                              className="input slim"
+                              value={r.role}
+                              onChange={(e) => updateXField(r.row, "role", e.target.value)}
+                            >
+                              <option value="key">key(core)</option>
+                              <option value="control">control</option>
+                              <option value="interaction">interaction</option>
+                              <option value="other">other</option>
+                            </select>
+                          </div>
+                        ))}
                       </div>
-                    </div>
 
-                    <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
-                      <div style={{ fontWeight: 700 }}>括号含义</div>
-                      {["t_stat", "std_err", "p_value", "unknown"].map((opt) => (
-                        <label key={opt} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <input
-                            type="radio"
-                            name="bracket"
-                            checked={skeletonDraft?.bracket_type_default === opt}
-                            onChange={() =>
-                              updateSkeleton((s) => {
-                                s.bracket_type_default = opt;
-                                return s;
-                              })
-                            }
-                          />
-                          {opt}
-                        </label>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="grid-preview">
-                      <div style={{ fontWeight: 700, marginBottom: 6 }}>CSV 预览</div>
-                      <div style={{ overflowX: "auto" }}>
-                        <table className="table">
-                          <thead>
-                            <tr>
-                              {detail.grid.header.map((col, idx) => (
-                                <th key={idx}>{idx === 0 ? "row" : `c${idx}`}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {detail.grid.rows.slice(0, 8).map((row, ridx) => {
-                              const rowId = getRowId(row, ridx);
-                              const isX = detail.skeleton.x_rows.some((r) => r.row === rowId);
-                              const isFE = detail.skeleton.fe_rows.some((r) => r.row === rowId);
-                              const isObs = detail.skeleton.obs_rows.some((r) => r.row === rowId);
-                              const rowClass = isX ? "preview-x" : isFE ? "preview-fe" : isObs ? "preview-obs" : "";
+                      <div className="card" style={{ marginTop: 10 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>Y columns</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {detail.grid.header
+                            .map((_, idx) => idx)
+                            .filter((idx) => idx > 0)
+                            .map((idx) => {
+                              const active = isYCol(idx);
                               return (
-                                <tr key={ridx} className={rowClass}>
-                                  {row.map((cell, cidx) => (
-                                    <td key={cidx}>{cell}</td>
-                                  ))}
-                                </tr>
+                                <div className="row" key={idx} style={{ alignItems: "flex-start", gap: 8 }}>
+                                  <label style={{ minWidth: 60 }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={active}
+                                      onChange={() => toggleYCol(idx)}
+                                      style={{ marginRight: 6 }}
+                                    />
+                                    col c{idx}
+                                  </label>
+                                  {active && (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                      <input
+                                        className="input slim"
+                                        placeholder="depvar_label"
+                                        value={yCol(idx)?.depvar_label || ""}
+                                        onChange={(e) => updateYField(idx, "depvar_label", e.target.value)}
+                                      />
+                                      <input
+                                        className="input slim"
+                                        placeholder="data_var_name"
+                                        value={yCol(idx)?.depvar_data_name || ""}
+                                        onChange={(e) => updateYField(idx, "depvar_data_name", e.target.value)}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
                               );
                             })}
-                          </tbody>
-                        </table>
+                        </div>
                       </div>
-                    </div>
-                    <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
-                      Skeleton 状态: {detail.skeleton.status} · 默认括号: {detail.skeleton.bracket_type_default}
-                    </div>
-                  </>
-                )}
+
+                      {suggestedRows && (
+                        <div className="card" style={{ marginTop: 10 }}>
+                          <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ fontWeight: 700 }}>LLM draft (not applied)</div>
+                            <div className="row" style={{ gap: 8 }}>
+                              <button className="button secondary" onClick={acceptSuggest}>
+                                Accept
+                              </button>
+                              <button className="button secondary" onClick={rejectSuggest}>
+                                Reject
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid-preview" style={{ maxHeight: 240 }}>
+                            <table className="table">
+                              <tbody>
+                                {suggestedRows.slice(0, 6).map((row, idx) => (
+                                  <tr key={idx}>
+                                    {row.map((cell, cidx) => (
+                                      <td key={cidx}>{cell}</td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="action-bar">
+                        <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <button className="button big" onClick={() => saveAll(false)} disabled={saving}>
+                            {saving ? "saving..." : "save all"}
+                          </button>
+                          <button className="button big secondary" onClick={() => saveAll(true)} disabled={saving}>
+                            {saving ? "saving..." : "save & next"}
+                          </button>
+                          <button className="button secondary" onClick={() => updateStatusOnly("done")} disabled={saving}>
+                            mark done
+                          </button>
+                          <button className="button secondary" onClick={() => updateStatusOnly("in_progress")} disabled={saving}>
+                            mark in-progress
+                          </button>
+                          <input
+                            className="input slim"
+                            style={{ minWidth: 200 }}
+                            placeholder="extra instructions to LLM (optional)"
+                            value={suggestInstruction}
+                            onChange={(e) => setSuggestInstruction(e.target.value)}
+                          />
+                          <button className="button secondary" onClick={runSuggest} disabled={suggestLoading}>
+                            {suggestLoading ? "LLM generating..." : "LLM autofill"}
+                          </button>
+                          {saveMsg && <span style={{ color: "#0f5132" }}>{saveMsg}</span>}
+                          {llmStatus && <span style={{ color: "#b45309" }}>{llmStatus}</span>}
+                        </div>
+                      </div>
+
+                      <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
+                        <div style={{ fontWeight: 700 }}>Bracket type</div>
+                        {["t_stat", "std_err", "p_value", "unknown"].map((opt) => (
+                          <label key={opt} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <input
+                              type="radio"
+                              name="bracket"
+                              checked={skeletonDraft?.bracket_type_default === opt}
+                              onChange={() =>
+                                updateSkeleton((s) => {
+                                  s.bracket_type_default = opt;
+                                  return s;
+                                })
+                              }
+                            />
+                            {opt}
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid-preview">
+                        <div style={{ fontWeight: 700, marginBottom: 6 }}>CSV preview</div>
+                        <div
+                          className="table-scroll"
+                          ref={previewScroll.ref}
+                          onMouseDown={previewScroll.onMouseDown}
+                          onMouseMove={previewScroll.onMouseMove}
+                          onMouseUp={previewScroll.onMouseUp}
+                          onMouseLeave={previewScroll.onMouseLeave}
+                        >
+                          <table className="table">
+                            <thead>
+                              <tr>
+                                {detail.grid.header.map((_, idx) => (
+                                  <th key={idx}>{idx === 0 ? "row" : `c${idx}`}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {detail.grid.rows.slice(0, 8).map((row, ridx) => {
+                                const rowId = getRowId(row, ridx);
+                                const isX = detail.skeleton.x_rows.some((r) => r.row === rowId);
+                                const isFE = detail.skeleton.fe_rows.some((r) => r.row === rowId);
+                                const isObs = detail.skeleton.obs_rows.some((r) => r.row === rowId);
+                                const rowClass = isX ? "preview-x" : isFE ? "preview-fe" : isObs ? "preview-obs" : "";
+                                return (
+                                  <tr key={ridx} className={rowClass}>
+                                    {row.map((cell, cidx) => (
+                                      <td key={cidx}>{cell}</td>
+                                    ))}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
+                        Skeleton status: {detail.skeleton.status} | default bracket: {detail.skeleton.bracket_type_default}
+                      </div>
+
+                </div>
               </div>
             </div>
           ) : (
-            <div style={{ flex: 2, minWidth: 400 }}>正在加载表格内容...</div>
+            <div style={{ flex: 2, minWidth: 400 }}>loading detail...</div>
           )}
         </div>
       )}
@@ -961,9 +983,9 @@ function App() {
         <div className="modal-backdrop" onClick={() => setShowImageModal(false)}>
           <div className="modal-body" onClick={(e) => e.stopPropagation()}>
             <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontWeight: 700 }}>大图预览</div>
+              <div style={{ fontWeight: 700 }}>Image preview</div>
               <button className="button secondary" onClick={() => setShowImageModal(false)}>
-                关闭
+                close
               </button>
             </div>
             <div className="modal-image-wrap">
@@ -977,13 +999,13 @@ function App() {
         <div className="context-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
           {menu.type === "col" ? (
             <>
-              <div onClick={() => { insertColumnAt(menu.index); setMenu(null); }}>在左侧插入列</div>
-              <div onClick={() => { insertColumnAt(menu.index + 1); setMenu(null); }}>在右侧插入列</div>
+              <div onClick={() => { insertColumnAt(menu.index); setMenu(null); }}>insert left</div>
+              <div onClick={() => { insertColumnAt(menu.index + 1); setMenu(null); }}>insert right</div>
             </>
           ) : (
             <>
-              <div onClick={() => { insertRowAt(menu.index); setMenu(null); }}>在上方插入行</div>
-              <div onClick={() => { insertRowAt(menu.index + 1); setMenu(null); }}>在下方插入行</div>
+              <div onClick={() => { insertRowAt(menu.index); setMenu(null); }}>insert above</div>
+              <div onClick={() => { insertRowAt(menu.index + 1); setMenu(null); }}>insert below</div>
             </>
           )}
         </div>

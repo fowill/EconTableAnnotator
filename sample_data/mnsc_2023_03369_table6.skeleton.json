@@ -1,0 +1,30 @@
+{
+  "paper_id": "mnsc_2023_03369",
+  "table_id": "table6",
+  "grid_file": "mnsc_2023_03369_table6.csv",
+  "image_file": "mnsc_2023_03369_table6.png",
+  "status": "in_progress",
+  "bracket_type_default": "std_err",
+  "bracket_type_overrides": {},
+  "y_columns": [
+    { "col": 1, "depvar_label": "", "depvar_data_name": "", "note": "" },
+    { "col": 2, "depvar_label": "", "depvar_data_name": "", "note": "" },
+    { "col": 3, "depvar_label": "", "depvar_data_name": "", "note": "" },
+    { "col": 4, "depvar_label": "", "depvar_data_name": "", "note": "" },
+    { "col": 5, "depvar_label": "", "depvar_data_name": "", "note": "" },
+    { "col": 6, "depvar_label": "", "depvar_data_name": "", "note": "" }
+  ],
+  "x_rows": [
+    { "row": 1, "display_label": "1(Post Office)", "data_var_name": "", "role": "key", "note": "" }
+  ],
+  "fe_rows": [],
+  "obs_rows": [
+    { "row": 3, "label": "Observations", "note": "" }
+  ],
+  "notes": {
+    "rows": {},
+    "cols": {},
+    "cells": {}
+  },
+  "last_modified": "2025-11-26T00:00:00"
+}
