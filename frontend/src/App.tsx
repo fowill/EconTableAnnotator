@@ -1,10 +1,14 @@
+
 import { useEffect, useMemo, useState } from "react";
 import {
   fetchProjects,
   fetchTableDetail,
+  getConfig,
   imageUrl,
   saveCsv,
   saveSkeleton,
+  suggestGrid,
+  updateConfig,
   SkeletonModel,
   TableDetail,
   TableListItem
@@ -42,23 +46,37 @@ function App() {
   const [savingCsv, setSavingCsv] = useState(false);
   const [savingSkeleton, setSavingSkeleton] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [gridDirty, setGridDirty] = useState(false);
+  const [skeletonDirty, setSkeletonDirty] = useState(false);
 
   const [zoom, setZoom] = useState(1);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestInstruction, setSuggestInstruction] = useState("");
+  const [suggestedRows, setSuggestedRows] = useState<string[][] | null>(null);
+  const [llmStatus, setLlmStatus] = useState<string>("");
+
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeySet, setApiKeySet] = useState(false);
 
   useEffect(() => {
-    fetch("/api/config")
-      .then((res) => res.json())
-      .then((cfg) => setRootDir(cfg.root_dir || ""))
+    getConfig()
+      .then((cfg) => {
+        setRootDir(cfg.root_dir || "");
+        setBaseUrl(cfg.openai_base_url || "");
+        setApiKeySet(Boolean(cfg.openai_api_key_set));
+      })
       .catch(() => {});
   }, []);
-
   const loadProjects = async () => {
     setLoading(true);
     setError(null);
     setSelected(null);
     setDetail(null);
     setEditMode(false);
+    setGridDirty(false);
+    setSkeletonDirty(false);
     try {
       const list = await fetchProjects(rootDir);
       setProjects(list);
@@ -85,6 +103,9 @@ function App() {
     setDetail(null);
     setDetailError(null);
     setEditMode(false);
+    setGridDirty(false);
+    setSkeletonDirty(false);
+    setSuggestedRows(null);
     try {
       const data = await fetchTableDetail(item.paper_id, item.table_id, rootDir);
       setDetail(data);
@@ -106,6 +127,7 @@ function App() {
       next[r][c] = value;
       return next;
     });
+    setGridDirty(true);
   };
 
   const saveGrid = async () => {
@@ -118,6 +140,7 @@ function App() {
         rows: gridDraft
       });
       setSaveMsg("已保存 CSV");
+      setGridDirty(false);
     } catch (err: any) {
       setSaveMsg(err.message || "保存失败");
     } finally {
@@ -126,7 +149,11 @@ function App() {
   };
 
   const updateSkeleton = (updater: (s: SkeletonModel) => SkeletonModel) => {
-    setSkeletonDraft((prev) => (prev ? updater(structuredClone(prev)) : prev));
+    setSkeletonDraft((prev) => {
+      if (!prev) return prev;
+      setSkeletonDirty(true);
+      return updater(structuredClone(prev));
+    });
   };
 
   const toggleYCol = (col: number) => {
@@ -214,7 +241,6 @@ function App() {
       return s;
     });
   };
-
   const saveSkeletonDraft = async () => {
     if (!detail || !skeletonDraft) return;
     setSavingSkeleton(true);
@@ -222,6 +248,7 @@ function App() {
     try {
       await saveSkeleton(detail.info.paper_id, detail.info.table_id, rootDir, skeletonDraft);
       setSaveMsg("已保存 Skeleton");
+      setSkeletonDirty(false);
     } catch (err: any) {
       setSaveMsg(err.message || "保存失败");
     } finally {
@@ -241,6 +268,11 @@ function App() {
         (p) => p.paper_id === detail.info.paper_id && p.table_id === detail.info.table_id
       );
       const next = list.slice(currentIndex + 1).find((p) => p.status !== "done");
+      setSkeletonDraft(payload);
+      setDetail((prev) => (prev ? { ...prev, skeleton: { ...prev.skeleton, status: "done" } } : prev));
+      setSelected((prev) => (prev ? { ...prev, status: "done" } : prev));
+      setGridDirty(false);
+      setSkeletonDirty(false);
       if (next) {
         setSaveMsg("已保存并跳转到下一条");
         await openDetail(next);
@@ -255,12 +287,152 @@ function App() {
     }
   };
 
+  const updateStatusOnly = async (status: "done" | "in_progress") => {
+    if (!detail || !skeletonDraft) return;
+    setSavingSkeleton(true);
+    setSaveMsg(null);
+    try {
+      const payload = { ...skeletonDraft, status };
+      await saveSkeleton(detail.info.paper_id, detail.info.table_id, rootDir, payload);
+      setSkeletonDraft(payload);
+      setDetail((prev) => (prev ? { ...prev, skeleton: { ...prev.skeleton, status } } : prev));
+      setSelected((prev) => (prev ? { ...prev, status } : prev));
+      const list = await refreshProjects();
+      setSaveMsg(status === "done" ? "已标记为完成" : "已标记为未完成");
+      setGridDirty(false);
+      setSkeletonDirty(false);
+      if (status === "done") {
+        const currentIndex = list.findIndex(
+          (p) => p.paper_id === detail.info.paper_id && p.table_id === detail.info.table_id
+        );
+        const next =
+          list.slice(currentIndex + 1).find((p) => p.status !== "done") ||
+          list.find((p) => p.status !== "done" && !(p.paper_id === detail.info.paper_id && p.table_id === detail.info.table_id));
+        if (next) {
+          await openDetail(next);
+          setEditMode(true);
+        } else {
+          setSaveMsg("已标记完成，暂无未完成任务");
+        }
+      }
+    } catch (err: any) {
+      setSaveMsg(err.message || "保存失败");
+    } finally {
+      setSavingSkeleton(false);
+    }
+  };
+
+  const attemptJump = async (item: TableListItem) => {
+    const dirty = gridDirty || skeletonDirty;
+    if (selected && dirty) {
+      const ok = window.confirm("有未保存的改动，是否保存后跳转？取消则留在当前页面。");
+      if (!ok) return;
+      try {
+        if (detail) {
+          if (gridDirty) {
+            await saveGrid();
+          }
+          if (skeletonDraft) {
+            await saveSkeletonDraft();
+          }
+        }
+      } catch (e) {
+        setSaveMsg("保存失败，未跳转");
+        return;
+      }
+    }
+    openDetail(item);
+  };
+
+  const sortedProjects = useMemo(() => {
+    const order: Record<string, number> = { done: 0, in_progress: 1, not_started: 2 };
+    return [...projects].sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
+  }, [projects]);
+
+  const removeColumn = (idx: number) => {
+    if (idx === 0) return;
+    setGridDraft((prev) => prev.map((row) => row.filter((_, c) => c !== idx)));
+    if (detail) {
+      detail.grid.header = detail.grid.header.filter((_, c) => c !== idx);
+    }
+    setGridDirty(true);
+  };
+
+  const removeRow = (ridx: number) => {
+    setGridDraft((prev) => prev.filter((_, i) => i !== ridx));
+    setGridDirty(true);
+  };
+
+  const runSuggest = async () => {
+    if (!detail) return;
+    setSuggestLoading(true);
+    setSaveMsg(null);
+    setLlmStatus("LLM 请求中...");
+    try {
+      const rows = await suggestGrid(detail.info.paper_id, detail.info.table_id, rootDir, suggestInstruction);
+      setSuggestedRows(rows);
+      setSaveMsg("已生成 LLM 建议，可选择 Accept 或 Reject");
+      setLlmStatus("已生成建议，等待确认");
+    } catch (err: any) {
+      setSaveMsg(err.message || "LLM 建议失败");
+      setLlmStatus(`LLM 失败: ${err.message || ""}`);
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
+  const acceptSuggest = () => {
+    if (!suggestedRows) return;
+    setGridDraft(suggestedRows);
+    setGridDirty(true);
+    setSuggestedRows(null);
+    setSaveMsg("已应用 LLM 建议，请保存");
+    setLlmStatus("已应用建议，记得保存");
+  };
+
+  const rejectSuggest = () => {
+    setSuggestedRows(null);
+    setSaveMsg("已拒绝 LLM 建议");
+    setLlmStatus("已拒绝建议");
+  };
+
+  const saveConfig = async () => {
+    try {
+      const res = await updateConfig({
+        root_dir: rootDir,
+        openai_base_url: baseUrl || null,
+        openai_api_key: apiKey ? apiKey : undefined
+      });
+      setRootDir(res.root_dir || rootDir);
+      setBaseUrl(res.openai_base_url || "");
+      setApiKeySet(Boolean(res.openai_api_key_set));
+      if (apiKey) setApiKey("");
+      setSaveMsg("配置已保存");
+    } catch (err: any) {
+      setSaveMsg(err.message || "配置保存失败");
+    }
+  };
+
+  const forgetApiKey = async () => {
+    try {
+      const res = await updateConfig({
+        root_dir: rootDir,
+        openai_base_url: baseUrl || null,
+        openai_api_key: ""
+      });
+      setApiKey("");
+      setApiKeySet(Boolean(res.openai_api_key_set));
+      setSaveMsg("已清除 API Key");
+    } catch (err: any) {
+      setSaveMsg(err.message || "清除失败");
+    }
+  };
+
   const isYCol = (col: number) => skeletonDraft?.y_columns.some((c) => c.col === col);
   const yCol = (col: number) => skeletonDraft?.y_columns.find((c) => c.col === col);
   const xRow = (row: number) => skeletonDraft?.x_rows.find((r) => r.row === row);
   const isFERow = (row: number) => skeletonDraft?.fe_rows.some((r) => r.row === row);
   const isObsRow = (row: number) => skeletonDraft?.obs_rows.some((r) => r.row === row);
-
   return (
     <div className="page">
       <h1 style={{ margin: 0 }}>Econ Table Annotator</h1>
@@ -270,14 +442,48 @@ function App() {
 
       {!editMode && (
         <div className="card">
-          <div className="row">
-            <input
-              className="input"
-              placeholder="root_dir (后端可访问的目录)"
-              value={rootDir}
-              onChange={(e) => setRootDir(e.target.value)}
-            />
-            <button className="button" onClick={loadProjects} disabled={loading}>
+          <div className="row" style={{ alignItems: "flex-end" }}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <label style={{ fontSize: 12, color: "#6b7280" }}>root_dir</label>
+              <input
+                className="input"
+                placeholder="后端可访问的目录"
+                value={rootDir}
+                onChange={(e) => setRootDir(e.target.value)}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={{ fontSize: 12, color: "#6b7280" }}>OpenAI Base URL (可选)</label>
+              <input
+                className="input"
+                placeholder="如 https://api.shubiaobiao.cn/v1/"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={{ fontSize: 12, color: "#6b7280" }}>
+                API Key {apiKeySet ? "（已设置）" : ""}
+              </label>
+              {!apiKeySet ? (
+                <input
+                  className="input"
+                  placeholder="sk-..."
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  type="password"
+                />
+              ) : (
+                <div style={{ fontSize: 13, color: "#065f46" }}>已设置，除非更换无需再次填写</div>
+              )}
+            </div>
+            <button className="button" onClick={saveConfig} style={{ height: 42 }}>
+              保存配置
+            </button>
+            <button className="button secondary" onClick={forgetApiKey} style={{ height: 42 }}>
+              忘记 API Key
+            </button>
+            <button className="button" onClick={loadProjects} disabled={loading} style={{ height: 42 }}>
               {loading ? "加载中..." : "加载项目"}
             </button>
           </div>
@@ -335,6 +541,27 @@ function App() {
 
           {detail ? (
             <div className="row edit-shell vertical">
+              <div className="status-rail">
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>任务</div>
+                <div className="status-list">
+                  {sortedProjects.map((p) => (
+                    <div
+                      key={`${p.paper_id}-${p.table_id}`}
+                      className={`status-item ${
+                        selected?.paper_id === p.paper_id && selected?.table_id === p.table_id ? "active" : ""
+                      }`}
+                      onClick={() => attemptJump(p)}
+                    >
+                      <div className="status-top">
+                        <span>{p.paper_id}</span>
+                        <span className={`pill ${p.status}`}>{p.status}</span>
+                      </div>
+                      <div className="status-sub">{p.table_id}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="image-panel">
                 <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ fontWeight: 700 }}>图片预览</div>
@@ -362,7 +589,6 @@ function App() {
                   <div style={{ color: "#d97706" }}>没有找到配套图片</div>
                 )}
               </div>
-
               <div className="edit-panel">
                 {editMode ? (
                   <>
@@ -373,7 +599,15 @@ function App() {
                           <thead>
                             <tr>
                               {detail.grid.header.map((col, idx) => {
-                                const colNum = idx + 1;
+                                const displayName = idx === 0 ? "row" : `c${idx}`;
+                                if (idx === 0) {
+                                  return (
+                                    <th key={idx}>
+                                      <div>{displayName}</div>
+                                    </th>
+                                  );
+                                }
+                                const colNum = idx;
                                 const active = isYCol(colNum);
                                 return (
                                   <th
@@ -382,7 +616,18 @@ function App() {
                                     onClick={() => toggleYCol(colNum)}
                                     title="点击标注/取消为 Y 列"
                                   >
-                                    <div>{col}</div>
+                                    <div className="row" style={{ alignItems: "center", gap: 6 }}>
+                                      <span>{displayName}</span>
+                                      <button
+                                        className="mini-btn danger"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          removeColumn(idx);
+                                        }}
+                                      >
+                                        删列
+                                      </button>
+                                    </div>
                                     {active && (
                                       <div className="small-inputs" onClick={(e) => e.stopPropagation()}>
                                         <input
@@ -444,6 +689,13 @@ function App() {
                                           >
                                             N
                                           </button>
+                                          <button
+                                            className="mini-btn danger"
+                                            onClick={() => removeRow(ridx)}
+                                            title="删除该行"
+                                          >
+                                            删行
+                                          </button>
                                         </div>
                                       ) : (
                                         <input
@@ -493,7 +745,36 @@ function App() {
                       ))}
                     </div>
 
-                    <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
+                    {suggestedRows && (
+                      <div className="card" style={{ marginTop: 10 }}>
+                        <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
+                          <div style={{ fontWeight: 700 }}>LLM 建议预览（未应用）</div>
+                          <div className="row" style={{ gap: 8 }}>
+                            <button className="button secondary" onClick={acceptSuggest}>
+                              Accept
+                            </button>
+                            <button className="button secondary" onClick={rejectSuggest}>
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid-preview" style={{ maxHeight: 240 }}>
+                          <table className="table">
+                            <tbody>
+                              {suggestedRows.slice(0, 6).map((row, idx) => (
+                                <tr key={idx}>
+                                  {row.map((cell, cidx) => (
+                                    <td key={cidx}>{cell}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="row" style={{ marginTop: 10, alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                       <button className="button" onClick={saveGrid} disabled={savingCsv}>
                         {savingCsv ? "保存中..." : "保存 CSV"}
                       </button>
@@ -503,7 +784,28 @@ function App() {
                       <button className="button secondary" onClick={saveAndNext} disabled={savingSkeleton}>
                         {savingSkeleton ? "保存中..." : "保存并跳到下一条未完成"}
                       </button>
+                      <button className="button secondary" onClick={() => updateStatusOnly("done")} disabled={savingSkeleton}>
+                        标记完成
+                      </button>
+                      <button
+                        className="button secondary"
+                        onClick={() => updateStatusOnly("in_progress")}
+                        disabled={savingSkeleton}
+                      >
+                        标记未完成
+                      </button>
+                      <input
+                        className="input slim"
+                        style={{ minWidth: 200 }}
+                        placeholder="给 LLM 的补充指令（可选）"
+                        value={suggestInstruction}
+                        onChange={(e) => setSuggestInstruction(e.target.value)}
+                      />
+                      <button className="button secondary" onClick={runSuggest} disabled={suggestLoading}>
+                        {suggestLoading ? "LLM 填充中..." : "LLM 填充建议"}
+                      </button>
                       {saveMsg && <span style={{ color: "#0f5132" }}>{saveMsg}</span>}
+                      {llmStatus && <span style={{ color: "#b45309" }}>{llmStatus}</span>}
                     </div>
 
                     <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
@@ -535,7 +837,7 @@ function App() {
                           <thead>
                             <tr>
                               {detail.grid.header.map((col, idx) => (
-                                <th key={idx}>{col}</th>
+                                <th key={idx}>{idx === 0 ? "row" : `c${idx}`}</th>
                               ))}
                             </tr>
                           </thead>

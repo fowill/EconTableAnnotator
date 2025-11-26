@@ -1,11 +1,12 @@
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
+from openai import OpenAI
 
 from backend.file_utils import (
     default_skeleton,
@@ -23,6 +24,8 @@ from backend.models import GridData, SkeletonModel, TableDetail, TableInfo
 
 class AppConfig(BaseSettings):
     root_dir: Path = Path.cwd()
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None
 
     class Config:
         env_prefix = "APP_"
@@ -31,6 +34,8 @@ class AppConfig(BaseSettings):
 
 class ConfigUpdate(BaseModel):
     root_dir: Path
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None
 
 
 settings = AppConfig()
@@ -54,7 +59,11 @@ def resolve_root_dir(root_dir: Optional[Path]) -> Path:
 
 @app.get("/api/config")
 def get_config():
-    return {"root_dir": str(settings.root_dir.resolve())}
+    return {
+        "root_dir": str(settings.root_dir.resolve()),
+        "openai_base_url": settings.openai_base_url,
+        "openai_api_key_set": bool(settings.openai_api_key),
+    }
 
 
 @app.post("/api/config")
@@ -62,7 +71,15 @@ def update_config(update: ConfigUpdate):
     if not update.root_dir.exists():
         raise HTTPException(status_code=400, detail="Provided root_dir does not exist")
     settings.root_dir = update.root_dir.resolve()
-    return {"root_dir": str(settings.root_dir)}
+    if update.openai_api_key is not None:
+        settings.openai_api_key = update.openai_api_key
+    if update.openai_base_url is not None:
+        settings.openai_base_url = update.openai_base_url
+    return {
+        "root_dir": str(settings.root_dir),
+        "openai_base_url": settings.openai_base_url,
+        "openai_api_key_set": bool(settings.openai_api_key),
+    }
 
 
 @app.get("/api/projects")
@@ -149,3 +166,86 @@ def fetch_image(paper_id: str, table_id: str, root_dir: Optional[Path] = Query(N
     if not image_path or not image_path.exists():
         raise HTTPException(status_code=404, detail="Image not found for table")
     return FileResponse(image_path)
+
+
+class SuggestRequest(BaseModel):
+    instruction: str | None = None
+
+
+@app.post("/api/table/{paper_id}/{table_id}/suggest_grid")
+def suggest_grid(
+    paper_id: str,
+    table_id: str,
+    payload: SuggestRequest,
+    request: Request,
+    root_dir: Optional[Path] = Query(None),
+):
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=400, detail="OpenAI API key not configured")
+
+    base = resolve_root_dir(root_dir)
+    csv_path, image_path, _ = find_table_paths(base, paper_id, table_id)
+    grid = read_csv_grid(csv_path)
+
+    image_url = None
+    if image_path:
+        # Build absolute URL for the served image
+        image_url = str(request.url_for("fetch_image", paper_id=paper_id, table_id=table_id))
+
+    prompt = (
+        "You are given a regression table image. "
+        "Return a CSV grid (header included) as JSON with the same dimensions as provided. "
+        "Keep the first column as row labels. Fill missing cells from the image where possible. "
+        "Respond ONLY with JSON object: {\"rows\": [...]} where rows is a list of row arrays matching the header length. "
+    )
+    if payload.instruction:
+        prompt += f"User instruction: {payload.instruction}"
+
+    client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
+    messages: list[dict] = [
+        {"role": "system", "content": prompt},
+        {
+          "role": "user",
+          "content": [
+            {"type": "text", "text": f"Header: {grid.header}. Current rows: {grid.rows[:4]} ... total {len(grid.rows)} rows."}
+          ],
+        },
+    ]
+    if image_url:
+        messages[1]["content"].append(
+            {"type": "image_url", "image_url": {"url": image_url}}
+        )
+
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.2,
+        )
+        content = resp.choices[0].message.content if resp.choices else None
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM request failed: {e}")
+
+    import json
+
+    try:
+        data = json.loads(content or "{}")
+        rows = data.get("rows")
+        if not isinstance(rows, list):
+            raise ValueError("rows missing")
+        # Ensure row width equals header
+        normalized = []
+        for r in rows:
+            if not isinstance(r, list):
+                continue
+            if len(r) < len(grid.header):
+                r = r + [""] * (len(grid.header) - len(r))
+            elif len(r) > len(grid.header):
+                r = r[: len(grid.header)]
+            normalized.append([str(x) for x in r])
+        if len(normalized) != len(grid.rows):
+            raise ValueError("row count mismatch")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse LLM output: {e}")
+
+    return {"ok": True, "rows": normalized}

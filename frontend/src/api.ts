@@ -38,8 +38,38 @@ export type TableDetail = {
   skeleton: SkeletonModel;
 };
 
+export type AppConfig = {
+  root_dir: string;
+  openai_base_url?: string | null;
+  openai_api_key_set?: boolean;
+};
+
 const withRoot = (path: string, rootDir: string) =>
   rootDir ? `${path}?root_dir=${encodeURIComponent(rootDir)}` : path;
+
+export async function getConfig(): Promise<AppConfig> {
+  const res = await fetch("/api/config");
+  if (!res.ok) {
+    throw new Error("加载配置失败");
+  }
+  return res.json();
+}
+
+export async function updateConfig(cfg: Partial<AppConfig> & { openai_api_key?: string | null }): Promise<AppConfig> {
+  const res = await fetch("/api/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      root_dir: cfg.root_dir,
+      openai_base_url: cfg.openai_base_url,
+      openai_api_key: cfg.openai_api_key
+    })
+  });
+  if (!res.ok) {
+    throw new Error("保存配置失败");
+  }
+  return res.json();
+}
 
 export async function fetchProjects(rootDir: string): Promise<TableListItem[]> {
   const res = await fetch(withRoot("/api/projects", rootDir));
@@ -95,4 +125,23 @@ export async function saveSkeleton(
   if (!res.ok) {
     throw new Error("保存 Skeleton 失败");
   }
+}
+
+export async function suggestGrid(
+  paperId: string,
+  tableId: string,
+  rootDir: string,
+  instruction?: string
+): Promise<string[][]> {
+  const res = await fetch(withRoot(`/api/table/${paperId}/${tableId}/suggest_grid`, rootDir), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instruction })
+  });
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(`LLM 建议失败: ${msg}`);
+  }
+  const data = await res.json();
+  return data.rows;
 }

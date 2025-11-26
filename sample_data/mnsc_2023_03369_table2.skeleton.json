@@ -1,0 +1,39 @@
+{
+  "paper_id": "mnsc_2023_03369",
+  "table_id": "table2",
+  "grid_file": "mnsc_2023_03369_table2.csv",
+  "image_file": "mnsc_2023_03369_table2.png",
+  "status": "done",
+  "bracket_type_default": "unknown",
+  "bracket_type_overrides": {},
+  "y_columns": [],
+  "x_rows": [
+    {
+      "row": 1,
+      "display_label": "RET_{t-1}",
+      "data_var_name": "",
+      "role": "key",
+      "note": ""
+    }
+  ],
+  "fe_rows": [
+    {
+      "row": 7,
+      "label": "Firm FE",
+      "note": ""
+    }
+  ],
+  "obs_rows": [
+    {
+      "row": 8,
+      "label": "N",
+      "note": ""
+    }
+  ],
+  "notes": {
+    "rows": {},
+    "cols": {},
+    "cells": {}
+  },
+  "last_modified": "2025-11-26T12:51:44.902166"
+}
