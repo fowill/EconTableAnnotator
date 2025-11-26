@@ -795,6 +795,45 @@ function App() {
                         </div>
                       ))}
                     </div>
+
+                    <div className="card" style={{ marginTop: 10 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Y 列标注</div>
+                      {detail.grid.header
+                        .map((_, idx) => idx)
+                        .filter((idx) => idx > 0)
+                        .map((idx) => {
+                          const active = isYCol(idx);
+                          return (
+                            <div className="row" key={idx} style={{ marginBottom: 8, alignItems: "center", gap: 8 }}>
+                              <label style={{ minWidth: 60 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={active}
+                                  onChange={() => toggleYCol(idx)}
+                                  style={{ marginRight: 6 }}
+                                />
+                                列 c{idx}
+                              </label>
+                              {active && (
+                                <>
+                                  <input
+                                    className="input slim"
+                                    placeholder="depvar_label"
+                                    value={yCol(idx)?.depvar_label || ""}
+                                    onChange={(e) => updateYField(idx, "depvar_label", e.target.value)}
+                                  />
+                                  <input
+                                    className="input slim"
+                                    placeholder="data_var_name"
+                                    value={yCol(idx)?.depvar_data_name || ""}
+                                    onChange={(e) => updateYField(idx, "depvar_data_name", e.target.value)}
+                                  />
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
                     {suggestedRows && (
                       <div className="card" style={{ marginTop: 10 }}>
                         <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
@@ -887,13 +926,20 @@ function App() {
                             </tr>
                           </thead>
                           <tbody>
-                            {detail.grid.rows.slice(0, 8).map((row, ridx) => (
-                              <tr key={ridx}>
-                                {row.map((cell, cidx) => (
-                                  <td key={cidx}>{cell}</td>
-                                ))}
-                              </tr>
-                            ))}
+                            {detail.grid.rows.slice(0, 8).map((row, ridx) => {
+                              const rowId = getRowId(row, ridx);
+                              const isX = detail.skeleton.x_rows.some((r) => r.row === rowId);
+                              const isFE = detail.skeleton.fe_rows.some((r) => r.row === rowId);
+                              const isObs = detail.skeleton.obs_rows.some((r) => r.row === rowId);
+                              const rowClass = isX ? "preview-x" : isFE ? "preview-fe" : isObs ? "preview-obs" : "";
+                              return (
+                                <tr key={ridx} className={rowClass}>
+                                  {row.map((cell, cidx) => (
+                                    <td key={cidx}>{cell}</td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

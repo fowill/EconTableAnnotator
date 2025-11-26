@@ -304,6 +304,18 @@ a {
   background: #fee2e2;
 }
 
+.preview-x td {
+  background: #eef2ff;
+}
+
+.preview-fe td {
+  background: #ecfeff;
+}
+
+.preview-obs td {
+  background: #fef9c3;
+}
+
 .input.slim {
   padding: 6px 8px;
 }
