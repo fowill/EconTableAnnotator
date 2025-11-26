@@ -1,0 +1,6 @@
+row_id,c1,c2,c3
+1,"Post x Treatment","0.220**","0.205**"
+2,"","(2.45)","(2.30)"
+3,"Controls","Yes","Yes"
+4,"Year FE","Yes","Yes"
+5,"N","450","450"

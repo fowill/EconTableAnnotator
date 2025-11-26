@@ -1,0 +1,59 @@
+{
+  "paper_id": "mnsc_2023_03369",
+  "table_id": "table1",
+  "grid_file": "mnsc_2023_03369_table1.csv",
+  "image_file": "mnsc_2023_03369_table1.png",
+  "status": "in_progress",
+  "bracket_type_default": "t_stat",
+  "bracket_type_overrides": {},
+  "y_columns": [
+    {
+      "col": 2,
+      "depvar_label": "RET_t",
+      "depvar_data_name": "ret_t",
+      "note": "主回归列"
+    }
+  ],
+  "x_rows": [
+    {
+      "row": 1,
+      "display_label": "CIR_{t-1}",
+      "data_var_name": "cir_lag1",
+      "role": "key",
+      "note": ""
+    },
+    {
+      "row": 3,
+      "display_label": "VOL",
+      "data_var_name": "vol",
+      "role": "control",
+      "note": ""
+    }
+  ],
+  "fe_rows": [
+    {
+      "row": 5,
+      "label": "Industry FE",
+      "note": ""
+    }
+  ],
+  "obs_rows": [
+    {
+      "row": 6,
+      "label": "N",
+      "note": ""
+    }
+  ],
+  "notes": {
+    "rows": {
+      "1": "核心变量"
+    },
+    "cols": {
+      "2": "baseline"
+    },
+    "cells": {
+      "1,2": "确认数值 0.130"
+    }
+  },
+  "last_modified": "2025-11-26T17:35:00Z"
+}
