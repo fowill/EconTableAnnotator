@@ -1,6 +1,9 @@
-row_id,c1,c2,c3
-1,"Post x Treatment","0.220**","0.205**"
-2,"","(2.45)","(2.30)"
-3,"Controls","Yes","Yes"
-4,"Year FE","Yes","Yes"
-5,"N","450","450"
+row,c1,c2,c3,c4,c5
+1,Postal Routes,-0.192***,-1.174***,,
+2,,(0.057),(0.498),,
+3,1(Post Offices),,,0.186*,0.203*
+,,,,(0.107),(0.115)
+4,Distance from Historic Trails,No,No,No,Yes
+5,N,14942,13423,14942,14942
+,CD F-statistic,,,329.2,329.2
+,KP F-statistic,,,11.1,11.1

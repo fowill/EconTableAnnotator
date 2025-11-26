@@ -16,6 +16,7 @@ import {
 
 type XRow = SkeletonModel["x_rows"][number];
 type YCol = SkeletonModel["y_columns"][number];
+type MenuState = { type: "row" | "col"; index: number; x: number; y: number } | null;
 
 const statusBadge = (status: string) => {
   const normalized = status?.toLowerCase();
@@ -59,6 +60,8 @@ function App() {
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiKeySet, setApiKeySet] = useState(false);
+
+  const [menu, setMenu] = useState<MenuState>(null);
 
   useEffect(() => {
     getConfig()
@@ -129,22 +132,40 @@ function App() {
     });
     setGridDirty(true);
   };
-
-  const saveGrid = async () => {
-    if (!detail) return;
+  const saveAll = async (andNext?: boolean) => {
+    if (!detail || !skeletonDraft) return;
     setSavingCsv(true);
+    setSavingSkeleton(true);
     setSaveMsg(null);
     try {
       await saveCsv(detail.info.paper_id, detail.info.table_id, rootDir, {
         header: detail.grid.header,
         rows: gridDraft
       });
-      setSaveMsg("已保存 CSV");
+      await saveSkeleton(detail.info.paper_id, detail.info.table_id, rootDir, skeletonDraft);
+      setSaveMsg(andNext ? "已保存，跳转中..." : "已保存全部");
       setGridDirty(false);
+      setSkeletonDirty(false);
+      if (andNext) {
+        const list = await refreshProjects();
+        const currentIndex = list.findIndex(
+          (p) => p.paper_id === detail.info.paper_id && p.table_id === detail.info.table_id
+        );
+        const next =
+          list.slice(currentIndex + 1).find((p) => p.status !== "done") ||
+          list.find((p) => p.status !== "done" && !(p.paper_id === detail.info.paper_id && p.table_id === detail.info.table_id));
+        if (next) {
+          await openDetail(next);
+          setEditMode(true);
+        } else {
+          setSaveMsg("已保存，暂无未完成任务");
+        }
+      }
     } catch (err: any) {
       setSaveMsg(err.message || "保存失败");
     } finally {
       setSavingCsv(false);
+      setSavingSkeleton(false);
     }
   };
 
@@ -241,52 +262,6 @@ function App() {
       return s;
     });
   };
-  const saveSkeletonDraft = async () => {
-    if (!detail || !skeletonDraft) return;
-    setSavingSkeleton(true);
-    setSaveMsg(null);
-    try {
-      await saveSkeleton(detail.info.paper_id, detail.info.table_id, rootDir, skeletonDraft);
-      setSaveMsg("已保存 Skeleton");
-      setSkeletonDirty(false);
-    } catch (err: any) {
-      setSaveMsg(err.message || "保存失败");
-    } finally {
-      setSavingSkeleton(false);
-    }
-  };
-
-  const saveAndNext = async () => {
-    if (!detail || !skeletonDraft) return;
-    setSavingSkeleton(true);
-    setSaveMsg(null);
-    try {
-      const payload = { ...skeletonDraft, status: "done" as const };
-      await saveSkeleton(detail.info.paper_id, detail.info.table_id, rootDir, payload);
-      const list = await refreshProjects();
-      const currentIndex = list.findIndex(
-        (p) => p.paper_id === detail.info.paper_id && p.table_id === detail.info.table_id
-      );
-      const next = list.slice(currentIndex + 1).find((p) => p.status !== "done");
-      setSkeletonDraft(payload);
-      setDetail((prev) => (prev ? { ...prev, skeleton: { ...prev.skeleton, status: "done" } } : prev));
-      setSelected((prev) => (prev ? { ...prev, status: "done" } : prev));
-      setGridDirty(false);
-      setSkeletonDirty(false);
-      if (next) {
-        setSaveMsg("已保存并跳转到下一条");
-        await openDetail(next);
-        setEditMode(true);
-      } else {
-        setSaveMsg("已保存，已是最后一条未完成任务");
-      }
-    } catch (err: any) {
-      setSaveMsg(err.message || "保存失败");
-    } finally {
-      setSavingSkeleton(false);
-    }
-  };
-
   const updateStatusOnly = async (status: "done" | "in_progress") => {
     if (!detail || !skeletonDraft) return;
     setSavingSkeleton(true);
@@ -329,12 +304,7 @@ function App() {
       if (!ok) return;
       try {
         if (detail) {
-          if (gridDirty) {
-            await saveGrid();
-          }
-          if (skeletonDraft) {
-            await saveSkeletonDraft();
-          }
+          await saveAll(false);
         }
       } catch (e) {
         setSaveMsg("保存失败，未跳转");
@@ -345,18 +315,20 @@ function App() {
   };
 
   const sortedProjects = useMemo(() => {
-    const order: Record<string, number> = { done: 0, in_progress: 1, not_started: 2 };
-    return [...projects].sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
+    return [...projects].sort((a, b) => {
+      if (a.paper_id === b.paper_id) return a.table_id.localeCompare(b.table_id);
+      return a.paper_id.localeCompare(b.paper_id);
+    });
   }, [projects]);
 
   const normalizeHeader = (len: number) => ["row", ...Array.from({ length: len - 1 }, (_v, i) => `c${i + 1}`)];
 
   const applyGridUpdate = (rows: string[][], headerLen: number) => {
     const header = normalizeHeader(headerLen);
-    const fixedRows = rows.map((r, idx) => {
+    const fixedRows = rows.map((r) => {
       const row = [...r];
       while (row.length < headerLen) row.push("");
-      return [String(idx + 1), ...row.slice(1, headerLen)];
+      return row.slice(0, headerLen);
     });
     setGridDraft(fixedRows);
     setGridDirty(true);
@@ -462,8 +434,10 @@ function App() {
   const xRow = (row: number) => skeletonDraft?.x_rows.find((r) => r.row === row);
   const isFERow = (row: number) => skeletonDraft?.fe_rows.some((r) => r.row === row);
   const isObsRow = (row: number) => skeletonDraft?.obs_rows.some((r) => r.row === row);
+
+  const saving = savingCsv || savingSkeleton;
   return (
-    <div className="page">
+    <div className="page" onClick={() => setMenu(null)}>
       <h1 style={{ margin: 0 }}>Econ Table Annotator</h1>
       <p style={{ margin: 0, opacity: 0.8 }}>
         本地标注站：左看图片，右修 CSV / Skeleton。先加载项目列表，再点选表格进入标注模式。
@@ -524,6 +498,7 @@ function App() {
                 <th style={{ width: 80 }}>table_id</th>
                 <th>csv</th>
                 <th style={{ width: 140 }}>状态</th>
+                <th style={{ width: 160 }}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -537,13 +512,40 @@ function App() {
                   <td>{item.table_id}</td>
                   <td style={{ fontSize: 12, opacity: 0.8 }}>{item.csv_path}</td>
                   <td>{statusBadge(item.status)}</td>
+                  <td>
+                    <button
+                      className="mini-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (selected?.paper_id === item.paper_id && selected?.table_id === item.table_id) {
+                          updateStatusOnly("done");
+                        } else {
+                          openDetail(item).then(() => updateStatusOnly("done"));
+                        }
+                      }}
+                    >
+                      标记完成
+                    </button>
+                    <button
+                      className="mini-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (selected?.paper_id === item.paper_id && selected?.table_id === item.table_id) {
+                          updateStatusOnly("in_progress");
+                        } else {
+                          openDetail(item).then(() => updateStatusOnly("in_progress"));
+                        }
+                      }}
+                    >
+                      标记未完成
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-
       {selected && (
         <div className="card">
           <div className="row" style={{ alignItems: "center" }}>
@@ -629,51 +631,46 @@ function App() {
                             <tr>
                               {detail.grid.header.map((col, idx) => {
                                 const displayName = idx === 0 ? "row" : `c${idx}`;
-                                if (idx === 0) {
-                                  return (
-                                    <th key={idx}>
-                                      <div>{displayName}</div>
-                                    </th>
-                                  );
-                                }
                                 const colNum = idx;
-                                const active = isYCol(colNum);
+                                const active = idx !== 0 && isYCol(colNum);
                                 return (
                                   <th
                                     key={idx}
                                     className={active ? "highlight" : ""}
-                                    onClick={() => toggleYCol(colNum)}
-                                    title="点击标注/取消为 Y 列"
+                                    onClick={() => {
+                                      if (idx !== 0) toggleYCol(colNum);
+                                    }}
+                                    onContextMenu={(e) => {
+                                      e.preventDefault();
+                                      if (idx === 0) return;
+                                      setMenu({ type: "col", index: idx, x: e.clientX, y: e.clientY });
+                                    }}
+                                    title={idx === 0 ? "行编号" : "点击标注/取消为 Y 列，右键更多操作"}
                                   >
-                                    <div className="row" style={{ alignItems: "center", gap: 6 }}>
+                                    <div className="col-header">
+                                      {idx > 0 && (
+                                        <button
+                                          className="gap-add danger"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            removeColumn(idx);
+                                          }}
+                                        >
+                                          -
+                                        </button>
+                                      )}
                                       <span>{displayName}</span>
-                                      <button
-                                        className="mini-btn"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          insertColumnAt(idx);
-                                        }}
-                                      >
-                                        左插列
-                                      </button>
-                                      <button
-                                        className="mini-btn"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          insertColumnAt(idx + 1);
-                                        }}
-                                      >
-                                        右插列
-                                      </button>
-                                      <button
-                                        className="mini-btn danger"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          removeColumn(idx);
-                                        }}
-                                      >
-                                        删列
-                                      </button>
+                                      {idx > 0 && (
+                                        <button
+                                          className="gap-add"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            insertColumnAt(idx + 1);
+                                          }}
+                                        >
+                                          +
+                                        </button>
+                                      )}
                                     </div>
                                     {active && (
                                       <div className="small-inputs" onClick={(e) => e.stopPropagation()}>
@@ -709,11 +706,11 @@ function App() {
                                         <div className="row row-labels">
                                           <span className="row-index">#{rowId}</span>
                                           <button
-                                            className="mini-btn"
-                                            onClick={() => insertRowAt(ridx)}
-                                            title="在当前行上方插入"
+                                            className="gap-add danger"
+                                            onClick={() => removeRow(ridx)}
+                                            title="删除该行"
                                           >
-                                            上插行
+                                            -
                                           </button>
                                           <button
                                             className={`mini-btn ${x ? "active" : ""}`}
@@ -744,18 +741,11 @@ function App() {
                                             N
                                           </button>
                                           <button
-                                            className="mini-btn danger"
-                                            onClick={() => removeRow(ridx)}
-                                            title="删除该行"
-                                          >
-                                            删行
-                                          </button>
-                                          <button
-                                            className="mini-btn"
+                                            className="gap-add"
                                             onClick={() => insertRowAt(ridx + 1)}
                                             title="在当前行下方插入"
                                           >
-                                            下插行
+                                            +
                                           </button>
                                         </div>
                                       ) : (
@@ -805,7 +795,6 @@ function App() {
                         </div>
                       ))}
                     </div>
-
                     {suggestedRows && (
                       <div className="card" style={{ marginTop: 10 }}>
                         <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
@@ -835,38 +824,33 @@ function App() {
                       </div>
                     )}
 
-                    <div className="row" style={{ marginTop: 10, alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                      <button className="button" onClick={saveGrid} disabled={savingCsv}>
-                        {savingCsv ? "保存中..." : "保存 CSV"}
-                      </button>
-                      <button className="button secondary" onClick={saveSkeletonDraft} disabled={savingSkeleton}>
-                        {savingSkeleton ? "保存中..." : "保存 Skeleton"}
-                      </button>
-                      <button className="button secondary" onClick={saveAndNext} disabled={savingSkeleton}>
-                        {savingSkeleton ? "保存中..." : "保存并跳到下一条未完成"}
-                      </button>
-                      <button className="button secondary" onClick={() => updateStatusOnly("done")} disabled={savingSkeleton}>
-                        标记完成
-                      </button>
-                      <button
-                        className="button secondary"
-                        onClick={() => updateStatusOnly("in_progress")}
-                        disabled={savingSkeleton}
-                      >
-                        标记未完成
-                      </button>
-                      <input
-                        className="input slim"
-                        style={{ minWidth: 200 }}
-                        placeholder="给 LLM 的补充指令（可选）"
-                        value={suggestInstruction}
-                        onChange={(e) => setSuggestInstruction(e.target.value)}
-                      />
-                      <button className="button secondary" onClick={runSuggest} disabled={suggestLoading}>
-                        {suggestLoading ? "LLM 填充中..." : "LLM 填充建议"}
-                      </button>
-                      {saveMsg && <span style={{ color: "#0f5132" }}>{saveMsg}</span>}
-                      {llmStatus && <span style={{ color: "#b45309" }}>{llmStatus}</span>}
+                    <div className="action-bar">
+                      <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <button className="button big" onClick={() => saveAll(false)} disabled={saving}>
+                          {saving ? "保存中..." : "保存全部"}
+                        </button>
+                        <button className="button big secondary" onClick={() => saveAll(true)} disabled={saving}>
+                          {saving ? "保存中..." : "保存并跳到下一条"}
+                        </button>
+                        <button className="button secondary" onClick={() => updateStatusOnly("done")} disabled={saving}>
+                          标记完成
+                        </button>
+                        <button className="button secondary" onClick={() => updateStatusOnly("in_progress")} disabled={saving}>
+                          标记未完成
+                        </button>
+                        <input
+                          className="input slim"
+                          style={{ minWidth: 200 }}
+                          placeholder="给 LLM 的补充指令（可选）"
+                          value={suggestInstruction}
+                          onChange={(e) => setSuggestInstruction(e.target.value)}
+                        />
+                        <button className="button secondary" onClick={runSuggest} disabled={suggestLoading}>
+                          {suggestLoading ? "LLM 填充中..." : "LLM 填充建议"}
+                        </button>
+                        {saveMsg && <span style={{ color: "#0f5132" }}>{saveMsg}</span>}
+                        {llmStatus && <span style={{ color: "#b45309" }}>{llmStatus}</span>}
+                      </div>
                     </div>
 
                     <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
@@ -940,6 +924,22 @@ function App() {
               <img src={imageSrc} alt="full" />
             </div>
           </div>
+        </div>
+      )}
+
+      {menu && (
+        <div className="context-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
+          {menu.type === "col" ? (
+            <>
+              <div onClick={() => { insertColumnAt(menu.index); setMenu(null); }}>在左侧插入列</div>
+              <div onClick={() => { insertColumnAt(menu.index + 1); setMenu(null); }}>在右侧插入列</div>
+            </>
+          ) : (
+            <>
+              <div onClick={() => { insertRowAt(menu.index); setMenu(null); }}>在上方插入行</div>
+              <div onClick={() => { insertRowAt(menu.index + 1); setMenu(null); }}>在下方插入行</div>
+            </>
+          )}
         </div>
       )}
     </div>

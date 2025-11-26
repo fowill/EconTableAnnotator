@@ -1,5 +1,7 @@
-row_id,c1,c2,c3,c4,c5
+row,c1,c2,c3,c4,c5
 1,1(Post Offices),0.030**,0.045**,0.035***,0.033**
 2,,(0.013),(0.014),(0.013),(0.013)
-7,Firm FE,No,Yes,Yes,Yes
+7,Initial Stock of Businesses,No,Yes,Yes,Yes
+,Population,No,No,Yes,Yes
+,Rail & Waterways,No,No,No,Yes
 8,N,38812,38812,38812,38812

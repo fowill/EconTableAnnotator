@@ -3,7 +3,7 @@
   "table_id": "table1",
   "grid_file": "mnsc_2023_03369_table1.csv",
   "image_file": "mnsc_2023_03369_table1.png",
-  "status": "done",
+  "status": "in_progress",
   "bracket_type_default": "t_stat",
   "bracket_type_overrides": {},
   "y_columns": [
@@ -55,5 +55,5 @@
       "1,2": "确认数值 0.130"
     }
   },
-  "last_modified": "2025-11-26T11:41:20.068720"
+  "last_modified": "2025-11-26T14:05:23.235803"
 }

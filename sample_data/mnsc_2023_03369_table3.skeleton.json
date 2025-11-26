@@ -1,0 +1,19 @@
+{
+  "paper_id": "mnsc_2023_03369",
+  "table_id": "table3",
+  "grid_file": "mnsc_2023_03369_table3.csv",
+  "image_file": "mnsc_2023_03369_table3.png",
+  "status": "done",
+  "bracket_type_default": "unknown",
+  "bracket_type_overrides": {},
+  "y_columns": [],
+  "x_rows": [],
+  "fe_rows": [],
+  "obs_rows": [],
+  "notes": {
+    "rows": {},
+    "cols": {},
+    "cells": {}
+  },
+  "last_modified": "2025-11-26T14:05:12.185033"
+}
