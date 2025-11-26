@@ -64,3 +64,35 @@ export async function fetchTableDetail(
 export function imageUrl(paperId: string, tableId: string, rootDir: string): string {
   return withRoot(`/api/table/${paperId}/${tableId}/image`, rootDir);
 }
+
+export async function saveCsv(
+  paperId: string,
+  tableId: string,
+  rootDir: string,
+  grid: GridData
+): Promise<void> {
+  const res = await fetch(withRoot(`/api/table/${paperId}/${tableId}/save_csv`, rootDir), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(grid)
+  });
+  if (!res.ok) {
+    throw new Error("保存 CSV 失败");
+  }
+}
+
+export async function saveSkeleton(
+  paperId: string,
+  tableId: string,
+  rootDir: string,
+  skeleton: SkeletonModel
+): Promise<void> {
+  const res = await fetch(withRoot(`/api/table/${paperId}/${tableId}/save_skeleton`, rootDir), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(skeleton)
+  });
+  if (!res.ok) {
+    throw new Error("保存 Skeleton 失败");
+  }
+}

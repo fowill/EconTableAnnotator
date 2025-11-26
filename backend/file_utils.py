@@ -13,7 +13,8 @@ def parse_table_filename(filename: str) -> Optional[Tuple[str, str]]:
     stem = Path(filename).stem
     if stem.endswith(".skeleton"):
         stem = stem[: -len(".skeleton")]
-    match = re.match(r"(?P<paper_id>.+?)_(?P<table_id>(?:table|figure)\\d+)", stem, flags=re.IGNORECASE)
+    # match e.g., mnsc_2023_03369_table1 -> paper_id=mnsc_2023_03369, table_id=table1
+    match = re.match(r"(?P<paper_id>.+?)_(?P<table_id>(?:table|figure)\d+)", stem, flags=re.IGNORECASE)
     if not match:
         return None
     return match.group("paper_id"), match.group("table_id")
@@ -166,4 +167,3 @@ def save_skeleton(csv_path: Path, skeleton: SkeletonModel) -> Path:
     content = json.dumps(json.loads(skeleton.json()), ensure_ascii=False, indent=2)
     target.write_text(content, encoding="utf-8")
     return target
-
