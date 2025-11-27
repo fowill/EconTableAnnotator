@@ -111,8 +111,18 @@ function App() {
     setSuggestedRows(null);
     try {
       const data = await fetchTableDetail(item.paper_id, item.table_id, rootDir);
-      setDetail(data);
-      setGridDraft(data.grid.rows.map((r) => [...r]));
+      const maxLen = Math.max(
+        data.grid.header.length,
+        ...data.grid.rows.map((r) => r.length)
+      );
+      const header = normalizeHeader(maxLen);
+      const fixedRows = data.grid.rows.map((r) => {
+        const row = [...r];
+        while (row.length < maxLen) row.push("");
+        return row.slice(0, maxLen);
+      });
+      setDetail({ ...data, grid: { ...data.grid, header, rows: fixedRows } });
+      setGridDraft(fixedRows);
       setSkeletonDraft(structuredClone(data.skeleton));
     } catch (err: any) {
       setDetailError(err.message || "加载失败");
@@ -314,7 +324,8 @@ function App() {
     openDetail(item, editMode);
   };
 
-  const normalizeHeader = (len: number) => ["row", ...Array.from({ length: len - 1 }, (_v, i) => `c${i + 1}`)];
+  // Normalize header: row id + label column + data columns c1..cN (so c1 starts at numeric column)
+  const normalizeHeader = (len: number) => ["row", "label", ...Array.from({ length: Math.max(0, len - 2) }, (_v, i) => `c${i + 1}`)];
 
   const applyGridUpdate = (rows: string[][], headerLen: number) => {
     const header = normalizeHeader(headerLen);
@@ -325,11 +336,11 @@ function App() {
     });
     setGridDraft(fixedRows);
     setGridDirty(true);
-    setDetail((prev) => (prev ? { ...prev, grid: { ...prev.grid, header } } : prev));
+    setDetail((prev) => (prev ? { ...prev, grid: { ...prev.grid, header, rows: fixedRows } } : prev));
   };
 
   const removeColumn = (idx: number) => {
-    if (idx <= 1) return; // 保留行号和行名称
+    if (idx <= 0) return; // 保留行号和行名称
     const newRows = gridDraft.map((row) => row.filter((_, c) => c !== idx));
     applyGridUpdate(newRows, (detail?.grid.header.length || 2) - 1);
   };
@@ -340,7 +351,7 @@ function App() {
   };
 
   const insertColumnAt = (idx: number) => {
-    if (idx < 2) idx = 2; // 数据列从 idx=2 开始
+    if (idx < 1) idx = 1; // 数据列从 idx=2 开始
     const newRows = gridDraft.map((row) => {
       const copy = [...row];
       copy.splice(idx, 0, "");

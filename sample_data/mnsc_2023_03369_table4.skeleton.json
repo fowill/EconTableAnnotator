@@ -7,33 +7,128 @@
   "bracket_type_default": "std_err",
   "bracket_type_overrides": {},
   "y_columns": [
-    { "col": 1, "depvar_label": "", "depvar_data_name": "", "note": "" },
-    { "col": 2, "depvar_label": "", "depvar_data_name": "", "note": "" },
-    { "col": 3, "depvar_label": "", "depvar_data_name": "", "note": "" },
-    { "col": 4, "depvar_label": "", "depvar_data_name": "", "note": "" },
-    { "col": 5, "depvar_label": "", "depvar_data_name": "", "note": "" }
+    {
+      "col": 1,
+      "depvar_label": "Entry Growth",
+      "depvar_data_name": "",
+      "note": ""
+    },
+    {
+      "col": 2,
+      "depvar_label": "Entry Growth",
+      "depvar_data_name": "",
+      "note": ""
+    },
+    {
+      "col": 3,
+      "depvar_label": "Entry Growth",
+      "depvar_data_name": "",
+      "note": ""
+    },
+    {
+      "col": 4,
+      "depvar_label": "Entry Growth",
+      "depvar_data_name": "",
+      "note": ""
+    },
+    {
+      "col": 5,
+      "depvar_label": "Entry Growth",
+      "depvar_data_name": "",
+      "note": ""
+    }
   ],
   "x_rows": [
-    { "row": 1, "display_label": "1(Post Offices)", "data_var_name": "", "role": "key", "note": "" },
-    { "row": 3, "display_label": "Financial Services", "data_var_name": "", "role": "control", "note": "" },
-    { "row": 5, "display_label": "1(Post Offices) × Financial Services", "data_var_name": "", "role": "interaction", "note": "" },
-    { "row": 7, "display_label": "Financial Dependency", "data_var_name": "", "role": "control", "note": "" },
-    { "row": 9, "display_label": "1(Post Offices) × Financial Dependency", "data_var_name": "", "role": "interaction", "note": "" },
-    { "row": 11, "display_label": "Communication", "data_var_name": "", "role": "control", "note": "" },
-    { "row": 13, "display_label": "1(Post Offices)× Communication", "data_var_name": "", "role": "interaction", "note": "" },
-    { "row": 15, "display_label": "Out-of-State Trade Journals", "data_var_name": "", "role": "control", "note": "" },
-    { "row": 17, "display_label": "1(Post Offices) × Out-of-State Trade Journals", "data_var_name": "", "role": "interaction", "note": "" },
-    { "row": 19, "display_label": "Patents", "data_var_name": "", "role": "control", "note": "" },
-    { "row": 21, "display_label": "1(Post Offices) × Patents", "data_var_name": "", "role": "interaction", "note": "" }
+    {
+      "row": 1,
+      "display_label": "1(Post Offices)",
+      "data_var_name": "",
+      "role": "key",
+      "note": ""
+    },
+    {
+      "row": 3,
+      "display_label": "Financial Services",
+      "data_var_name": "",
+      "role": "control",
+      "note": ""
+    },
+    {
+      "row": 5,
+      "display_label": "1(Post Offices) × Financial Services",
+      "data_var_name": "",
+      "role": "interaction",
+      "note": ""
+    },
+    {
+      "row": 7,
+      "display_label": "Financial Dependency",
+      "data_var_name": "",
+      "role": "control",
+      "note": ""
+    },
+    {
+      "row": 9,
+      "display_label": "1(Post Offices) × Financial Dependency",
+      "data_var_name": "",
+      "role": "interaction",
+      "note": ""
+    },
+    {
+      "row": 11,
+      "display_label": "Communication",
+      "data_var_name": "",
+      "role": "control",
+      "note": ""
+    },
+    {
+      "row": 13,
+      "display_label": "1(Post Offices)× Communication",
+      "data_var_name": "",
+      "role": "interaction",
+      "note": ""
+    },
+    {
+      "row": 15,
+      "display_label": "Out-of-State Trade Journals",
+      "data_var_name": "",
+      "role": "control",
+      "note": ""
+    },
+    {
+      "row": 17,
+      "display_label": "1(Post Offices) × Out-of-State Trade Journals",
+      "data_var_name": "",
+      "role": "interaction",
+      "note": ""
+    },
+    {
+      "row": 19,
+      "display_label": "Patents",
+      "data_var_name": "",
+      "role": "control",
+      "note": ""
+    },
+    {
+      "row": 21,
+      "display_label": "1(Post Offices) × Patents",
+      "data_var_name": "",
+      "role": "interaction",
+      "note": ""
+    }
   ],
   "fe_rows": [],
   "obs_rows": [
-    { "row": 23, "label": "Observations", "note": "" }
+    {
+      "row": 23,
+      "label": "Observations",
+      "note": ""
+    }
   ],
   "notes": {
     "rows": {},
     "cols": {},
     "cells": {}
   },
-  "last_modified": "2025-11-26T00:00:00"
+  "last_modified": "2025-11-27T01:11:23.445563"
 }

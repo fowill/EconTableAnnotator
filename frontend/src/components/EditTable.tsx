@@ -68,9 +68,11 @@ const EditTable = ({
   const [menu, setMenu] = useState<MenuState>(null);
 
   const headerCells = detail.grid.header.map((_, idx) => {
-    const isDataCol = idx > 0;
-    const displayName = idx === 0 ? "row" : `c${idx}`;
-    const colNum = idx;
+    const isRowCol = idx === 0;
+    const isLabelCol = idx === 1;
+    const isDataCol = idx > 1; // numeric columns start after label
+    const colNum = idx - 1; // c1 corresponds to idx=2
+    const displayName = isRowCol ? "row" : isLabelCol ? "label" : `c${colNum}`;
     const active = isDataCol && isYCol(colNum);
     return (
       <th
@@ -245,9 +247,9 @@ const EditTable = ({
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {detail.grid.header
                 .map((_, idx) => idx)
-              .filter((idx) => idx > 0)
+              .filter((idx) => idx > 1)
               .map((idx) => {
-                const colNum = idx;
+                const colNum = idx - 1;
                 const active = isYCol(colNum);
                   return (
                     <div className="row" key={idx} style={{ alignItems: "flex-start", gap: 8 }}>
@@ -335,18 +337,18 @@ const EditTable = ({
             onMouseDown={previewScroll.onMouseDown}
             onMouseMove={previewScroll.onMouseMove}
             onMouseUp={previewScroll.onMouseUp}
-            onMouseLeave={previewScroll.onMouseLeave}
-          >
-            <table className="table">
-              <thead>
-                <tr>
-                  {detail.grid.header.map((_, idx) => (
-                    <th key={idx}>{idx === 0 ? "row" : idx === 1 ? "label" : `c${idx - 1}`}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {detail.grid.rows.slice(0, 8).map((row, ridx) => {
+              onMouseLeave={previewScroll.onMouseLeave}
+            >
+              <table className="table">
+                <thead>
+                  <tr>
+                    {detail.grid.header.map((_, idx) => (
+                      <th key={idx}>{idx === 0 ? "row" : idx === 1 ? "label" : `c${idx - 1}`}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.grid.rows.slice(0, 8).map((row, ridx) => {
                   const rowId = getRowId(row, ridx);
                   const isX = detail.skeleton.x_rows.some((r) => r.row === rowId);
                   const isFE = detail.skeleton.fe_rows.some((r) => r.row === rowId);
