@@ -9,22 +9,46 @@ from .models import GridData, NoteCollection, SkeletonModel, TableInfo, XRow, YC
 
 
 def parse_table_filename(filename: str) -> Optional[Tuple[str, str]]:
-    """Extract paper_id and table_id from filenames like foo_table1.csv."""
+    """Extract paper_id and table_id. Accept optional panel suffix: table1_A or table1_wp_A."""
     stem = Path(filename).stem
     if stem.endswith(".skeleton"):
         stem = stem[: -len(".skeleton")]
-    # match e.g., mnsc_2023_03369_table1 -> paper_id=mnsc_2023_03369, table_id=table1
-    match = re.match(r"(?P<paper_id>.+?)_(?P<table_id>(?:table|figure)\d+)", stem, flags=re.IGNORECASE)
+    match = re.match(
+        r"(?P<paper_id>.+?)_(?P<table_id>(?:table|figure)\d+(?:_[A-Za-z0-9]+)?)",
+        stem,
+        flags=re.IGNORECASE,
+    )
     if not match:
         return None
     return match.group("paper_id"), match.group("table_id")
 
 
 def find_image_path(directory: Path, base_prefix: str) -> Optional[Path]:
-    for ext in (".png", ".jpg", ".jpeg"):
-        candidate = directory / f"{base_prefix}{ext}"
-        if candidate.exists():
-            return candidate
+    """
+    Try exact match; if not found and table has panel suffix (e.g., table1_A),
+    fall back to base without panel, and a _wp image if present.
+    """
+    def try_candidate(prefix: str) -> Optional[Path]:
+        for ext in (".png", ".jpg", ".jpeg"):
+            candidate = directory / f"{prefix}{ext}"
+            if candidate.exists():
+                return candidate
+        return None
+
+    img = try_candidate(base_prefix)
+    if img:
+        return img
+
+    # Strip trailing panel suffix
+    if "_" in base_prefix:
+        base_no_panel = "_".join(base_prefix.split("_")[:-1])
+        img = try_candidate(base_no_panel)
+        if img:
+            return img
+        # try wp variant
+        img = try_candidate(f"{base_no_panel}_wp")
+        if img:
+            return img
     return None
 
 
