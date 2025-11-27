@@ -12,3 +12,5 @@ frontend/dist/
 frontend/.env*
 .env*
 sample_data/
+pre_annotator/config.local.json
+sample_data2/

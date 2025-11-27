@@ -1,0 +1,5 @@
+{
+  "api_key": "sk-xxxx",
+  "base_url": "https://api.shubiaobiao.cn/v1/",
+  "model": "gpt-4o"
+}

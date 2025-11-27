@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional
 import base64
 import json
@@ -22,6 +23,20 @@ def load_config_from_env() -> LLMConfig:
         base_url=os.getenv("OPENAI_BASE_URL") or os.getenv("PRE_ANNOTATOR_BASE_URL"),
         model=os.getenv("PRE_ANNOTATOR_MODEL", "gpt-4o"),
     )
+
+
+def load_config_from_file(path: Path) -> Optional[LLMConfig]:
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return LLMConfig(
+            api_key=data.get("api_key"),
+            base_url=data.get("base_url"),
+            model=data.get("model") or "gpt-4o",
+        )
+    except Exception:
+        return None
 
 
 def client_from_config(cfg: LLMConfig) -> openai.OpenAI:

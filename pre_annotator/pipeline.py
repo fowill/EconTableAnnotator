@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from .context_loader import ContextLoader, discover_images, default_table_id
-from .llm_client import ask_for_grid_and_skeleton, client_from_config, load_config_from_env
+from .llm_client import ask_for_grid_and_skeleton, client_from_config, load_config_from_env, load_config_from_file
 
 
 def ensure_dir(p: Path) -> None:
@@ -46,7 +46,8 @@ def main() -> None:
     ctx_loader = ContextLoader(paper_dir)
     ctx = ctx_loader.build(paper_id)
 
-    cfg = load_config_from_env()
+    # Load API config: prefer config.local.json in pre_annotator or --output-dir dir, then env
+    cfg = load_config_from_file(Path("pre_annotator/config.local.json")) or load_config_from_env()
     if args.model:
         cfg.model = args.model
     client = client_from_config(cfg)
