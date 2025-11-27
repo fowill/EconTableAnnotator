@@ -108,7 +108,7 @@ def main() -> None:
                 image_path=img,
                 paper_id=paper_id,
                 table_id=table_id,
-                pdf_text=ctx.pdf_text,
+                code_text=ctx.code_text,
                 candidate_columns=ctx.candidate_columns,
                 candidate_code_vars=ctx.candidate_code_vars,
                 example_text=example_text,

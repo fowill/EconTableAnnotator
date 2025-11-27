@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import useDragScroll from "../hooks/useDragScroll";
-import { SkeletonModel, TableDetail } from "../api";
+import { SkeletonModel, TableDetail, PaperContext } from "../api";
 
 type XRow = SkeletonModel["x_rows"][number];
 type YCol = SkeletonModel["y_columns"][number];
@@ -33,6 +33,8 @@ type Props = {
   rejectSuggest: () => void;
   skeletonDraft: SkeletonModel | null;
   updateSkeleton: (u: (s: SkeletonModel) => SkeletonModel) => void;
+  paperContext: PaperContext | null;
+  docUrlBuilder: (relPath: string) => string;
 };
 
 const EditTable = ({
@@ -61,7 +63,9 @@ const EditTable = ({
   acceptSuggest,
   rejectSuggest,
   skeletonDraft,
-  updateSkeleton
+  updateSkeleton,
+  paperContext,
+  docUrlBuilder
 }: Props) => {
   const editScroll = useDragScroll();
   const previewScroll = useDragScroll();
@@ -86,7 +90,7 @@ const EditTable = ({
           if (!isDataCol) return;
           setMenu({ type: "col", index: idx, x: e.clientX, y: e.clientY });
         }}
-        title={idx === 0 ? "行号" : "点击标注/取消 Y 列，右键插入列"}
+        title={idx === 0 ? "行号" : "点击标注/取消 Y 列，右键插入/删除列"}
       >
         <div className="col-header">
           {isDataCol && (
@@ -139,13 +143,20 @@ const EditTable = ({
             <div style={{ fontWeight: 700, marginBottom: 6 }}>可编辑 CSV + 点选标注</div>
             <div
               className="table-scroll"
+              style={{ overflowX: "auto", overflowY: "auto", cursor: editScroll.isDragging ? "grabbing" : "default" }}
               ref={editScroll.ref}
               onMouseDown={editScroll.onMouseDown}
               onMouseMove={editScroll.onMouseMove}
               onMouseUp={editScroll.onMouseUp}
               onMouseLeave={editScroll.onMouseLeave}
             >
-              <table className="table annotate-table">
+              <table
+                className="table annotate-table"
+                style={{
+                  width: "max-content",
+                  minWidth: "100%",
+                }}
+              >
                 <thead>
                   <tr>{headerCells}</tr>
                 </thead>
@@ -190,7 +201,7 @@ const EditTable = ({
                                 <button
                                   className={`mini-btn ${obs ? "active" : ""}`}
                                   onClick={() => toggleObsRow(rowId, row[1] || "N")}
-                                  title="标注为 N/观测行"
+                                  title="标注为 N/观测值 行"
                                 >
                                   N
                                 </button>
@@ -201,6 +212,10 @@ const EditTable = ({
                             ) : (
                               <input
                                 className="cell-input"
+                                style={{
+                                  width: cidx === 1 ? 220 : 90,
+                                  minWidth: cidx === 1 ? 200 : 80,
+                                }}
                                 value={cell}
                                 onChange={(e) => onCellChange(ridx, cidx, e.target.value)}
                               />
@@ -247,10 +262,10 @@ const EditTable = ({
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {detail.grid.header
                 .map((_, idx) => idx)
-              .filter((idx) => idx > 1)
-              .map((idx) => {
-                const colNum = idx - 1;
-                const active = isYCol(colNum);
+                .filter((idx) => idx > 1)
+                .map((idx) => {
+                  const colNum = idx - 1;
+                  const active = isYCol(colNum);
                   return (
                     <div className="row" key={idx} style={{ alignItems: "flex-start", gap: 8 }}>
                       <label style={{ minWidth: 60 }}>
@@ -261,7 +276,7 @@ const EditTable = ({
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                           <input
                             className="input slim"
-                            placeholder="depvar_label（表格列名）"
+                            placeholder="depvar_label（论文原文）"
                             value={yCol(colNum)?.depvar_label || ""}
                             onChange={(e) => updateYField(colNum, "depvar_label", e.target.value)}
                           />
@@ -282,10 +297,10 @@ const EditTable = ({
           {suggestedRows && (
             <div className="card" style={{ marginTop: 10 }}>
               <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ fontWeight: 700 }}>LLM 草稿（未应用）</div>
+                <div style={{ fontWeight: 700 }}>LLM 备选（未应用）</div>
                 <div className="row" style={{ gap: 8 }}>
                   <button className="button secondary" onClick={acceptSuggest}>
-                    接受
+                    应用
                   </button>
                   <button className="button secondary" onClick={rejectSuggest}>
                     拒绝
@@ -327,28 +342,80 @@ const EditTable = ({
               </label>
             ))}
           </div>
+
+          {paperContext && (
+            <div className="card" style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>参考信息</div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    flex: "1 1 260px",
+                    maxHeight: 180,
+                    overflow: "auto",
+                    border: "1px solid #e5e7eb",
+                    padding: 8,
+                    borderRadius: 6
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>数据列名</div>
+                  {paperContext.columns.length === 0 ? (
+                    <div style={{ color: "#6b7280" }}>无列名</div>
+                  ) : (
+                    paperContext.columns.map((c, i) => (
+                      <div key={i} style={{ fontFamily: "monospace", fontSize: 12, marginBottom: 2 }}>
+                        {c}
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div style={{ flex: "0 0 200px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ fontWeight: 600 }}>论文 PDF</div>
+                  {paperContext.pdfs.map((p, idx) => (
+                    <a key={idx} className="button secondary" href={docUrlBuilder(p)} target="_blank" rel="noreferrer">
+                      打开 {p}
+                    </a>
+                  ))}
+                  {paperContext.pdfs.length === 0 && <div style={{ color: "#6b7280" }}>未找到</div>}
+                  <div style={{ fontWeight: 600, marginTop: 8 }}>代码文档</div>
+                  {paperContext.code_docs.map((p, idx) => (
+                    <a key={idx} className="button secondary" href={docUrlBuilder(p)} target="_blank" rel="noreferrer">
+                      打开 {p}
+                    </a>
+                  ))}
+                  {paperContext.code_docs.length === 0 && <div style={{ color: "#6b7280" }}>未找到</div>}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <div className="grid-preview">
           <div style={{ fontWeight: 700, marginBottom: 6 }}>CSV 预览</div>
           <div
             className="table-scroll"
+            style={{ overflowX: "auto", overflowY: "auto", cursor: previewScroll.isDragging ? "grabbing" : "default" }}
             ref={previewScroll.ref}
             onMouseDown={previewScroll.onMouseDown}
             onMouseMove={previewScroll.onMouseMove}
             onMouseUp={previewScroll.onMouseUp}
-              onMouseLeave={previewScroll.onMouseLeave}
+            onMouseLeave={previewScroll.onMouseLeave}
+          >
+            <table
+              className="table"
+              style={{
+                width: "max-content",
+                minWidth: "100%"
+              }}
             >
-              <table className="table">
-                <thead>
-                  <tr>
-                    {detail.grid.header.map((_, idx) => (
-                      <th key={idx}>{idx === 0 ? "row" : idx === 1 ? "label" : `c${idx - 1}`}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {detail.grid.rows.slice(0, 8).map((row, ridx) => {
+              <thead>
+                <tr>
+                  {detail.grid.header.map((_, idx) => (
+                    <th key={idx}>{idx === 0 ? "row" : idx === 1 ? "label" : `c${idx - 1}`}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {detail.grid.rows.slice(0, 8).map((row, ridx) => {
                   const rowId = getRowId(row, ridx);
                   const isX = detail.skeleton.x_rows.some((r) => r.row === rowId);
                   const isFE = detail.skeleton.fe_rows.some((r) => r.row === rowId);

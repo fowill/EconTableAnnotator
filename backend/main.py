@@ -15,6 +15,7 @@ from backend.file_utils import (
     locate_image,
     locate_skeleton,
     read_csv_grid,
+    collect_columns,
     save_skeleton,
     scan_tables,
     write_csv_grid,
@@ -166,6 +167,61 @@ def fetch_image(paper_id: str, table_id: str, root_dir: Optional[Path] = Query(N
     if not image_path or not image_path.exists():
         raise HTTPException(status_code=404, detail="Image not found for table")
     return FileResponse(image_path)
+
+
+@app.get("/api/paper/{paper_id}/context")
+def get_paper_context(paper_id: str, root_dir: Optional[Path] = Query(None)):
+    base = resolve_root_dir(root_dir)
+    # data files containing paper_id
+    data_files = [
+        p
+        for p in base.rglob("*")
+        if p.is_file()
+        and paper_id in p.name
+        and p.suffix.lower()
+        in {
+            ".csv",
+            ".tsv",
+            ".dta",
+            ".sav",
+            ".sas7bdat",
+            ".rds",
+            ".rdata",
+            ".feather",
+            ".parquet",
+            ".xlsx",
+            ".xls",
+            ".pkl",
+        }
+    ]
+    columns = collect_columns(data_files)
+    def rel_path(p: Path) -> str:
+        try:
+            return str(p.resolve().relative_to(base.resolve()))
+        except Exception:
+            return str(p)
+
+    pdfs = [p for p in base.rglob(f"nomask_{paper_id}.pdf")]
+    pdfs += [p for p in base.rglob("*.pdf") if paper_id in p.name and p not in pdfs]
+    code_docs = [p for p in base.rglob("*") if p.is_file() and paper_id in p.name and p.suffix.lower() in {".pdf", ".md", ".txt"}]
+    return {
+        "columns": columns,
+        "pdfs": [rel_path(p) for p in pdfs],
+        "code_docs": [rel_path(p) for p in code_docs],
+    }
+
+
+@app.get("/api/paper/{paper_id}/doc")
+def fetch_paper_doc(paper_id: str, path: str, root_dir: Optional[Path] = Query(None)):
+    base = resolve_root_dir(root_dir)
+    target = (base / path).resolve()
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        target.relative_to(base.resolve())
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid path")
+    return FileResponse(target)
 
 
 class SuggestRequest(BaseModel):

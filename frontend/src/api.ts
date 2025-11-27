@@ -95,6 +95,25 @@ export function imageUrl(paperId: string, tableId: string, rootDir: string): str
   return withRoot(`/api/table/${paperId}/${tableId}/image`, rootDir);
 }
 
+export type PaperContext = {
+  columns: string[];
+  pdfs: string[];
+  code_docs: string[];
+};
+
+export async function fetchPaperContext(paperId: string, rootDir: string): Promise<PaperContext> {
+  const res = await fetch(withRoot(`/api/paper/${paperId}/context`, rootDir));
+  if (!res.ok) {
+    throw new Error("Failed to load paper context");
+  }
+  return res.json();
+}
+
+export function docUrl(paperId: string, relativePath: string, rootDir: string): string {
+  const encoded = encodeURIComponent(relativePath);
+  return withRoot(`/api/paper/${paperId}/doc?path=${encoded}`, rootDir);
+}
+
 export async function saveCsv(
   paperId: string,
   tableId: string,

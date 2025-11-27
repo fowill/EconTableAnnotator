@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from .models import GridData, NoteCollection, SkeletonModel, TableInfo, XRow, YColumn
+DATA_EXTS = {".csv", ".tsv", ".dta", ".sav", ".sas7bdat", ".rds", ".rdata", ".feather", ".parquet", ".xlsx", ".xls", ".pkl"}
+DOC_EXTS = {".pdf", ".md", ".txt"}
 
 
 def parse_table_filename(filename: str) -> Optional[Tuple[str, str]]:
@@ -137,6 +139,64 @@ def read_csv_grid(path: Path) -> GridData:
         return GridData(header=[], rows=[])
     header, *rows = reader
     return GridData(header=header, rows=rows)
+
+
+def collect_columns(paths: List[Path], max_columns: int = 5000) -> List[str]:
+    cols: List[str] = []
+    for p in paths:
+        if len(cols) >= max_columns:
+            break
+        ext = p.suffix.lower()
+        try:
+            if ext in {".csv", ".tsv"}:
+                import pandas as pd
+
+                df = pd.read_csv(p, nrows=0, sep="," if ext == ".csv" else "\t")
+                cols.extend(df.columns.tolist())
+            elif ext in {".xlsx", ".xls"}:
+                import pandas as pd
+
+                xls = pd.ExcelFile(p)
+                for sheet in xls.sheet_names:
+                    df = xls.parse(sheet, nrows=0)
+                    cols.extend(df.columns.tolist())
+            elif ext in {".dta", ".sav", ".sas7bdat"}:
+                import pyreadstat
+
+                meta = pyreadstat.read_filemeta(str(p))
+                cols.extend(meta.column_names)
+            elif ext in {".rds", ".rdata"}:
+                import pyreadr
+
+                res = pyreadr.read_r(str(p))
+                for _, df in res.items():
+                    try:
+                        cols.extend(df.columns.tolist())
+                    except Exception:
+                        pass
+            elif ext in {".feather", ".parquet"}:
+                import pandas as pd
+
+                df = pd.read_feather(p, columns=None) if ext == ".feather" else pd.read_parquet(p, columns=None)
+                cols.extend(df.columns.tolist())
+            elif ext == ".pkl":
+                import pickle
+
+                with p.open("rb") as f:
+                    obj = pickle.load(f)
+                if hasattr(obj, "columns"):
+                    cols.extend(getattr(obj, "columns").tolist())
+        except Exception:
+            continue
+    seen = set()
+    dedup: List[str] = []
+    for c in cols:
+        if c not in seen:
+            seen.add(c)
+            dedup.append(c)
+        if len(dedup) >= max_columns:
+            break
+    return dedup
 
 
 def write_csv_grid(path: Path, grid: GridData) -> None:

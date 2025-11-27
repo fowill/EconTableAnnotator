@@ -7,6 +7,7 @@ import re
 
 SUPPORTED_IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
 SUPPORTED_CODE_EXTS = {".py", ".r", ".jl", ".m", ".sas", ".do", ".ado", ".qmd", ".ipynb"}
+DOC_EXTS = {".pdf", ".md", ".txt"}
 DATA_EXTS = {".csv", ".tsv", ".dta", ".sav", ".sas7bdat", ".rds", ".rdata", ".feather", ".parquet", ".xlsx", ".xls", ".pkl"}
 
 
@@ -18,6 +19,7 @@ class ProjectContext:
     code_files: List[Path]
     candidate_columns: Set[str]
     candidate_code_vars: Set[str]
+    code_text: str
     pdf_text: str
 
 
@@ -25,20 +27,38 @@ class ContextLoader:
     def __init__(self, project_root: Path) -> None:
         self.root = Path(project_root)
 
-    def find_pdf(self) -> Optional[Path]:
-        pdfs = list(self.root.glob("nomask_*.pdf")) or list(self.root.glob("*.pdf"))
-        return pdfs[0] if pdfs else None
+    def find_pdf(self, paper_id: str) -> List[Path]:
+        papers_dir = self.root / "papers"
+        if papers_dir.exists():
+            pdfs = list(papers_dir.glob(f"nomask_{paper_id}.pdf"))
+            pdfs += [p for p in papers_dir.glob("*.pdf") if p not in pdfs]
+        else:
+            pdfs = list(self.root.glob(f"nomask_{paper_id}.pdf")) + list(self.root.glob("*.pdf"))
+        return pdfs
 
     def find_data_files(self) -> List[Path]:
+        data_dir = self.root / "data"
         files: List[Path] = []
-        for ext in DATA_EXTS:
-            files += list(self.root.rglob(f"*{ext}"))
+        if data_dir.exists():
+            for ext in DATA_EXTS:
+                files += list(data_dir.rglob(f"*{ext}"))
         return files
 
     def find_code_files(self) -> List[Path]:
+        code_dir = self.root / "code"
         files: List[Path] = []
-        for ext in SUPPORTED_CODE_EXTS:
-            files += [p for p in self.root.rglob(f"*{ext}") if "log" not in p.name.lower()]
+        if code_dir.exists():
+            for ext in SUPPORTED_CODE_EXTS:
+                files += [p for p in code_dir.rglob(f"*{ext}") if "log" not in p.name.lower()]
+        return files
+
+    def find_notes_files(self) -> List[Path]:
+        """Optional doc files (pdf/md/txt) placed with code; keep full text for LLM context."""
+        code_dir = self.root / "code"
+        files: List[Path] = []
+        if code_dir.exists():
+            for ext in DOC_EXTS:
+                files += [p for p in code_dir.rglob(f"*{ext}") if "log" not in p.name.lower()]
         return files
 
     def load_pdf_text(self, pdf: Optional[Path], limit_chars: int = 12000) -> str:
@@ -132,20 +152,67 @@ class ContextLoader:
                 break
         return vars
 
+    def load_code_text(self, paths: List[Path], max_chars: int = 120_000) -> str:
+        """Concatenate code files (non-logs)."""
+        texts: List[str] = []
+        total = 0
+        for p in paths:
+            try:
+                txt = p.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            texts.append(f"\n### FILE: {p.name}\n{txt}")
+            total += len(txt)
+            if total > max_chars:
+                break
+        return "\n".join(texts)[:max_chars]
+
+    def load_notes_text(self, paths: List[Path], max_chars: int = 40_000) -> str:
+        """Read accompanying docs (pdf/md/txt) that explain code; prefer full text if short."""
+        texts: List[str] = []
+        total = 0
+        for p in paths:
+            ext = p.suffix.lower()
+            try:
+                if ext == ".pdf":
+                    import pdfplumber
+
+                    parts: List[str] = []
+                    with pdfplumber.open(p) as doc:
+                        for page in doc.pages:
+                            parts.append(page.extract_text() or "")
+                            if sum(len(t) for t in parts) > max_chars:
+                                break
+                    txt = "\n".join(parts)
+                else:
+                    txt = p.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            texts.append(f"\n### DOC: {p.name}\n{txt}")
+            total += len(txt)
+            if total > max_chars:
+                break
+        return "\n".join(texts)[:max_chars]
+
     def build(self, paper_id: str) -> ProjectContext:
-        pdf = self.find_pdf()
+        pdfs = self.find_pdf(paper_id)
         data_files = self.find_data_files()
         code_files = self.find_code_files()
+        note_files = self.find_notes_files()
         cols = self.load_columns_from_data(data_files)
         code_vars = self.parse_code_vars(code_files)
-        pdf_text = self.load_pdf_text(pdf)
+        pdf_text = self.load_pdf_text(pdfs[0] if pdfs else None)
+        code_text = self.load_code_text(code_files)
+        doc_text = self.load_notes_text(note_files)
+        combined_code_text = code_text + ("\n\n### DOC NOTES ###\n" + doc_text if doc_text else "")
         return ProjectContext(
             paper_id=paper_id,
-            pdf_path=pdf,
+            pdf_path=pdfs[0] if pdfs else None,
             data_files=data_files,
             code_files=code_files,
             candidate_columns=cols,
             candidate_code_vars=code_vars,
+            code_text=combined_code_text,
             pdf_text=pdf_text,
         )
 

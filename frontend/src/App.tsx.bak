@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   fetchProjects,
   fetchTableDetail,
-  fetchPaperContext,
   getConfig,
   imageUrl,
   saveCsv,
@@ -11,9 +10,7 @@ import {
   updateConfig,
   SkeletonModel,
   TableDetail,
-  TableListItem,
-  PaperContext,
-  docUrl
+  TableListItem
 } from "./api";
 import ProjectList from "./components/ProjectList";
 import StatusRail from "./components/StatusRail";
@@ -38,7 +35,6 @@ function App() {
   const [editMode, setEditMode] = useState(false);
   const [gridDraft, setGridDraft] = useState<string[][]>([]);
   const [skeletonDraft, setSkeletonDraft] = useState<SkeletonModel | null>(null);
-  const [paperContext, setPaperContext] = useState<PaperContext | null>(null);
 
   const [savingCsv, setSavingCsv] = useState(false);
   const [savingSkeleton, setSavingSkeleton] = useState(false);
@@ -128,9 +124,6 @@ function App() {
       setDetail({ ...data, grid: { ...data.grid, header, rows: fixedRows } });
       setGridDraft(fixedRows);
       setSkeletonDraft(structuredClone(data.skeleton));
-      fetchPaperContext(item.paper_id, rootDir)
-        .then((ctx) => setPaperContext(ctx))
-        .catch(() => setPaperContext(null));
     } catch (err: any) {
       setDetailError(err.message || "加载失败");
     }
@@ -532,15 +525,11 @@ function App() {
                     toggleFERow={toggleFERow}
                     toggleObsRow={toggleObsRow}
                     suggestedRows={suggestedRows}
-                  acceptSuggest={acceptSuggest}
-                  rejectSuggest={rejectSuggest}
-                  skeletonDraft={skeletonDraft}
-                  updateSkeleton={updateSkeleton}
-                  paperContext={paperContext}
-                  paperId={detail.info.paper_id}
-                  rootDir={rootDir}
-                  docUrlBuilder={(relPath) => docUrl(detail.info.paper_id, relPath, rootDir)}
-                />
+                    acceptSuggest={acceptSuggest}
+                    rejectSuggest={rejectSuggest}
+                    skeletonDraft={skeletonDraft}
+                    updateSkeleton={updateSkeleton}
+                  />
 
                   <div className="action-bar" style={{ marginTop: 8 }}>
                     <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -599,3 +588,4 @@ function App() {
 }
 
 export default App;
+
