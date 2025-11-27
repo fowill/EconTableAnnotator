@@ -68,9 +68,9 @@ const EditTable = ({
   const [menu, setMenu] = useState<MenuState>(null);
 
   const headerCells = detail.grid.header.map((_, idx) => {
-    const isDataCol = idx >= 2;
-    const displayName = idx === 0 ? "row" : idx === 1 ? "label" : `c${idx - 1}`;
-    const colNum = isDataCol ? idx - 1 : 0;
+    const isDataCol = idx > 0;
+    const displayName = idx === 0 ? "row" : `c${idx}`;
+    const colNum = idx;
     const active = isDataCol && isYCol(colNum);
     return (
       <th
@@ -84,7 +84,7 @@ const EditTable = ({
           if (!isDataCol) return;
           setMenu({ type: "col", index: idx, x: e.clientX, y: e.clientY });
         }}
-        title={idx === 0 ? "行号" : idx === 1 ? "行名称" : "点击标注/取消 Y 列，右键插入列"}
+        title={idx === 0 ? "行号" : "点击标注/取消 Y 列，右键插入列"}
       >
         <div className="col-header">
           {isDataCol && (
@@ -245,10 +245,10 @@ const EditTable = ({
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {detail.grid.header
                 .map((_, idx) => idx)
-                .filter((idx) => idx > 1)
-                .map((idx) => {
-                  const colNum = idx - 1;
-                  const active = isYCol(colNum);
+              .filter((idx) => idx > 0)
+              .map((idx) => {
+                const colNum = idx;
+                const active = isYCol(colNum);
                   return (
                     <div className="row" key={idx} style={{ alignItems: "flex-start", gap: 8 }}>
                       <label style={{ minWidth: 60 }}>

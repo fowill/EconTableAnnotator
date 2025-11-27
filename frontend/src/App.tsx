@@ -314,7 +314,7 @@ function App() {
     openDetail(item, editMode);
   };
 
-  const normalizeHeader = (len: number) => ["row", "label", ...Array.from({ length: len - 2 }, (_v, i) => `c${i + 1}`)];
+  const normalizeHeader = (len: number) => ["row", ...Array.from({ length: len - 1 }, (_v, i) => `c${i + 1}`)];
 
   const applyGridUpdate = (rows: string[][], headerLen: number) => {
     const header = normalizeHeader(headerLen);
