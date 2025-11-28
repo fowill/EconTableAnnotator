@@ -27,6 +27,7 @@ const getRowId = (row: string[], idx: number) => {
 
 function App() {
   const [rootDir, setRootDir] = useState("");
+  const [dataRootDir, setDataRootDir] = useState("");
   const [projects, setProjects] = useState<TableListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,14 +68,20 @@ function App() {
   );
 
   useEffect(() => {
+    const savedDataRoot = localStorage.getItem("dataRootDir") || "";
     getConfig()
       .then((cfg) => {
         setRootDir(cfg.root_dir || "");
+        setDataRootDir(savedDataRoot || "");
         setBaseUrl(cfg.openai_base_url || "");
         setApiKeySet(Boolean(cfg.openai_api_key_set));
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("dataRootDir", dataRootDir || "");
+  }, [dataRootDir]);
 
   const loadProjects = async () => {
     setLoading(true);
@@ -128,7 +135,7 @@ function App() {
       setDetail({ ...data, grid: { ...data.grid, header, rows: fixedRows } });
       setGridDraft(fixedRows);
       setSkeletonDraft(structuredClone(data.skeleton));
-      fetchPaperContext(item.paper_id, rootDir)
+      fetchPaperContext(item.paper_id, dataRootDir || rootDir)
         .then((ctx) => setPaperContext(ctx))
         .catch(() => setPaperContext(null));
     } catch (err: any) {
@@ -433,14 +440,19 @@ function App() {
         <h1 style={{ margin: 0 }}>Econ Table Annotator</h1>
         <div style={{ color: "#374151" }}>本地标注站：左看图片，右改 CSV / Skeleton。</div>
       </header>
-
       <div className="card">
-        <div className="row" style={{ alignItems: "center" }}>
+        <div className="row" style={{ alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <input
             className="input"
-            placeholder="root_dir（包含 csv / 图片 / skeleton）"
+            placeholder="项目根目录（csv / 图片 / skeleton）"
             value={rootDir}
             onChange={(e) => setRootDir(e.target.value)}
+          />
+          <input
+            className="input"
+            placeholder="论文数据根目录（papers / data / code）"
+            value={dataRootDir}
+            onChange={(e) => setDataRootDir(e.target.value)}
           />
           <input
             className="input"
@@ -468,7 +480,7 @@ function App() {
                 updateConfig({ openai_api_key: "" });
               }}
             >
-              忘记 API Key
+              删除 API Key
             </button>
           )}
           <button className="button" onClick={loadProjects} disabled={loading}>
@@ -488,12 +500,12 @@ function App() {
 
       {selected && (
         <div className="card">
-          <div className="row" style={{ alignItems: "center" }}>
-            <div style={{ fontWeight: 700, fontSize: 18 }}>
-              {selected.paper_id} / {selected.table_id}
-            </div>
-            <StatusRail projects={sortedProjects} selected={selected} onJump={attemptJump} />
-          </div>
+                <div className="row" style={{ alignItems: "center" }}>
+                  <div style={{ fontWeight: 700, fontSize: 18 }}>
+                    {selected.paper_id} / {selected.table_id}
+                  </div>
+                  <StatusRail projects={sortedProjects} selected={selected} onJump={attemptJump} />
+                </div>
 
           {detailError && <div style={{ color: "#b91c1c" }}>{detailError}</div>}
 
@@ -539,7 +551,7 @@ function App() {
                   paperContext={paperContext}
                   paperId={detail.info.paper_id}
                   rootDir={rootDir}
-                  docUrlBuilder={(relPath) => docUrl(detail.info.paper_id, relPath, rootDir)}
+                  docUrlBuilder={(relPath) => docUrl(detail.info.paper_id, relPath, dataRootDir || rootDir)}
                 />
 
                   <div className="action-bar" style={{ marginTop: 8 }}>

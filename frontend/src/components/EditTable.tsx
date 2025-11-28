@@ -232,6 +232,26 @@ const EditTable = ({
 
           <div className="card" style={{ marginTop: 10 }}>
             <div style={{ fontWeight: 700, marginBottom: 8 }}>X 行详情</div>
+            {skeletonDraft?.x_rows?.length ? (
+              <div style={{ marginBottom: 6, color: "#374151", fontSize: 13 }}>
+                已有 X 行：
+                {skeletonDraft.x_rows.map((r) => (
+                  <span
+                    key={r.row}
+                    style={{
+                      display: "inline-block",
+                      padding: "2px 6px",
+                      marginRight: 6,
+                      borderRadius: 6,
+                      background: "#ecfdf3",
+                      fontFamily: "monospace"
+                    }}
+                  >
+                    row{r.row}: {r.display_label || "-"} | {r.data_var_name || "unknown"}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             {skeletonDraft?.x_rows.map((r) => (
               <div className="row" key={r.row} style={{ marginBottom: 8 }}>
                 <span style={{ width: 60 }}>Row {r.row}</span>
@@ -259,6 +279,26 @@ const EditTable = ({
 
           <div className="card" style={{ marginTop: 10 }}>
             <div style={{ fontWeight: 700, marginBottom: 8 }}>Y 列标注</div>
+            {skeletonDraft?.y_columns?.length ? (
+              <div style={{ marginBottom: 6, color: "#374151", fontSize: 13 }}>
+                已有 Y 列：
+                {skeletonDraft.y_columns.map((c) => (
+                  <span
+                    key={c.col}
+                    style={{
+                      display: "inline-block",
+                      padding: "2px 6px",
+                      marginRight: 6,
+                      borderRadius: 6,
+                      background: "#eef2ff",
+                      fontFamily: "monospace"
+                    }}
+                  >
+                    c{c.col}: {c.depvar_label || "-"} | {c.depvar_data_name || "unknown"}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {detail.grid.header
                 .map((_, idx) => idx)

@@ -44,8 +44,11 @@ export type AppConfig = {
   openai_api_key_set?: boolean;
 };
 
-const withRoot = (path: string, rootDir: string) =>
-  rootDir ? `${path}?root_dir=${encodeURIComponent(rootDir)}` : path;
+const withRoot = (path: string, rootDir: string) => {
+  if (!rootDir) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}root_dir=${encodeURIComponent(rootDir)}`;
+};
 
 export async function getConfig(): Promise<AppConfig> {
   const res = await fetch("/api/config");

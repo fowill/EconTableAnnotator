@@ -235,7 +235,15 @@ def load_skeleton(csv_path: Path) -> SkeletonModel:
     image_path = locate_image(csv_path)
     skeleton_path = locate_skeleton(csv_path)
     if skeleton_path and skeleton_path.exists():
-        data = json.loads(skeleton_path.read_text(encoding="utf-8"))
+        raw = json.loads(skeleton_path.read_text(encoding="utf-8"))
+        # normalize old notes format that used lists instead of dicts
+        notes = raw.get("notes")
+        if isinstance(notes, dict):
+            for key in ("rows", "cols", "cells"):
+                if isinstance(notes.get(key), list):
+                    notes[key] = {}
+        raw["notes"] = notes or {}
+        data = raw
         return SkeletonModel(**data)
     return default_skeleton(paper_id, table_id, csv_path, image_path)
 

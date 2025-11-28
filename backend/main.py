@@ -171,39 +171,45 @@ def fetch_image(paper_id: str, table_id: str, root_dir: Optional[Path] = Query(N
 
 @app.get("/api/paper/{paper_id}/context")
 def get_paper_context(paper_id: str, root_dir: Optional[Path] = Query(None)):
-    base = resolve_root_dir(root_dir)
-    # data files containing paper_id
-    data_files = [
-        p
-        for p in base.rglob("*")
-        if p.is_file()
-        and paper_id in p.name
-        and p.suffix.lower()
-        in {
-            ".csv",
-            ".tsv",
-            ".dta",
-            ".sav",
-            ".sas7bdat",
-            ".rds",
-            ".rdata",
-            ".feather",
-            ".parquet",
-            ".xlsx",
-            ".xls",
-            ".pkl",
-        }
-    ]
+    base_root = resolve_root_dir(root_dir)
+    paper_root = base_root / paper_id if (base_root / paper_id).exists() else base_root
+    data_dir = paper_root / "data"
+    papers_dir = paper_root / "papers"
+    code_dir = paper_root / "code"
+
+    data_files = []
+    data_exts = {".csv", ".tsv", ".dta", ".sav", ".sas7bdat", ".rds", ".rdata", ".feather", ".parquet", ".xlsx", ".xls", ".pkl"}
+    if data_dir.exists():
+        for ext in data_exts:
+            data_files += list(data_dir.rglob(f"*{ext}"))
+    else:
+        # fallback: only files that include paper_id in name
+        for ext in data_exts:
+            data_files += [p for p in paper_root.rglob(f"*{ext}") if paper_id in p.name]
     columns = collect_columns(data_files)
+
     def rel_path(p: Path) -> str:
         try:
-            return str(p.resolve().relative_to(base.resolve()))
+            return str(p.resolve().relative_to(paper_root.resolve()))
         except Exception:
             return str(p)
 
-    pdfs = [p for p in base.rglob(f"nomask_{paper_id}.pdf")]
-    pdfs += [p for p in base.rglob("*.pdf") if paper_id in p.name and p not in pdfs]
-    code_docs = [p for p in base.rglob("*") if p.is_file() and paper_id in p.name and p.suffix.lower() in {".pdf", ".md", ".txt"}]
+    pdfs = []
+    if papers_dir.exists():
+        pdfs = list(papers_dir.glob(f"nomask_{paper_id}.pdf"))
+        pdfs += [p for p in papers_dir.glob("*.pdf") if p not in pdfs]
+    else:
+        pdfs = list(paper_root.glob(f"nomask_{paper_id}.pdf")) + [p for p in paper_root.glob("*.pdf") if paper_id in p.name]
+
+    code_docs = []
+    doc_exts = {".pdf", ".md", ".txt"}
+    if code_dir.exists():
+        for ext in doc_exts:
+            code_docs += list(code_dir.rglob(f"*{ext}"))
+    else:
+        for ext in doc_exts:
+            code_docs += [p for p in paper_root.rglob(f"*{ext}") if paper_id in p.name]
+
     return {
         "columns": columns,
         "pdfs": [rel_path(p) for p in pdfs],
@@ -213,12 +219,13 @@ def get_paper_context(paper_id: str, root_dir: Optional[Path] = Query(None)):
 
 @app.get("/api/paper/{paper_id}/doc")
 def fetch_paper_doc(paper_id: str, path: str, root_dir: Optional[Path] = Query(None)):
-    base = resolve_root_dir(root_dir)
-    target = (base / path).resolve()
+    base_root = resolve_root_dir(root_dir)
+    paper_root = base_root / paper_id if (base_root / paper_id).exists() else base_root
+    target = (paper_root / Path(path)).resolve()
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="File not found")
     try:
-        target.relative_to(base.resolve())
+        target.relative_to(paper_root.resolve())
     except Exception:
         raise HTTPException(status_code=403, detail="Invalid path")
     return FileResponse(target)
