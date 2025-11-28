@@ -176,6 +176,7 @@ def get_paper_context(paper_id: str, root_dir: Optional[Path] = Query(None)):
     data_dir = paper_root / "data"
     papers_dir = paper_root / "papers"
     code_dir = paper_root / "code"
+    cache_file = paper_root / ".columns_cache.json"
 
     data_files = []
     data_exts = {".csv", ".tsv", ".dta", ".sav", ".sas7bdat", ".rds", ".rdata", ".feather", ".parquet", ".xlsx", ".xls", ".pkl"}
@@ -186,7 +187,15 @@ def get_paper_context(paper_id: str, root_dir: Optional[Path] = Query(None)):
         # fallback: only files that include paper_id in name
         for ext in data_exts:
             data_files += [p for p in paper_root.rglob(f"*{ext}") if paper_id in p.name]
-    columns = collect_columns(data_files)
+
+    # Prefer cached columns; only compute if cache exists (refresh endpoint writes it)
+    columns = []
+    if cache_file.exists():
+        try:
+            import json
+            columns = json.loads(cache_file.read_text(encoding="utf-8")).get("columns", [])
+        except Exception:
+            columns = []
 
     def rel_path(p: Path) -> str:
         try:
@@ -215,6 +224,36 @@ def get_paper_context(paper_id: str, root_dir: Optional[Path] = Query(None)):
         "pdfs": [rel_path(p) for p in pdfs],
         "code_docs": [rel_path(p) for p in code_docs],
     }
+
+
+@app.post("/api/paper/{paper_id}/refresh_columns")
+def refresh_columns(paper_id: str, root_dir: Optional[Path] = Query(None)):
+    """
+    Force-rescan data files under the paper directory and cache the column names.
+    """
+    base_root = resolve_root_dir(root_dir)
+    paper_root = base_root / paper_id if (base_root / paper_id).exists() else base_root
+    data_dir = paper_root / "data"
+    data_files = []
+    data_exts = {".csv", ".tsv", ".dta", ".sav", ".sas7bdat", ".rds", ".rdata", ".feather", ".parquet", ".xlsx", ".xls", ".pkl"}
+    if data_dir.exists():
+        for ext in data_exts:
+            data_files += list(data_dir.rglob(f"*{ext}"))
+    else:
+        for ext in data_exts:
+            data_files += [p for p in paper_root.rglob(f"*{ext}") if paper_id in p.name]
+
+    if not data_files:
+        raise HTTPException(status_code=404, detail="No data files found to extract columns")
+
+    columns = collect_columns(data_files)
+    cache_file = paper_root / ".columns_cache.json"
+    try:
+        import json
+        cache_file.write_text(json.dumps({"columns": columns}, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    return {"columns": columns}
 
 
 @app.get("/api/paper/{paper_id}/doc")

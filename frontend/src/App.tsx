@@ -13,7 +13,8 @@ import {
   TableDetail,
   TableListItem,
   PaperContext,
-  docUrl
+  docUrl,
+  refreshPaperColumns
 } from "./api";
 import ProjectList from "./components/ProjectList";
 import StatusRail from "./components/StatusRail";
@@ -53,6 +54,7 @@ function App() {
   const [suggestInstruction, setSuggestInstruction] = useState("");
   const [suggestedRows, setSuggestedRows] = useState<string[][] | null>(null);
   const [llmStatus, setLlmStatus] = useState<string>("");
+  const [contextMsg, setContextMsg] = useState<string>("");
 
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -434,6 +436,23 @@ function App() {
 
   const saving = savingCsv || savingSkeleton;
 
+  const handleRefreshColumns = async () => {
+    if (!selected) return;
+    if (!window.confirm("读取论文 data 目录计算列名？")) return;
+    try {
+      setContextMsg("正在读取数据列名...");
+      const cols = await refreshPaperColumns(selected.paper_id, dataRootDir || rootDir);
+      setPaperContext((prev) => ({
+        columns: cols,
+        pdfs: prev?.pdfs || [],
+        code_docs: prev?.code_docs || []
+      }));
+      setContextMsg("列名已更新");
+    } catch (err: any) {
+      setContextMsg(err.message || "读取列名失败");
+    }
+  };
+
   return (
     <div className="page" onClick={() => {}}>
       <header style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -549,6 +568,7 @@ function App() {
                   skeletonDraft={skeletonDraft}
                   updateSkeleton={updateSkeleton}
                   paperContext={paperContext}
+                  onRefreshColumns={handleRefreshColumns}
                   paperId={detail.info.paper_id}
                   rootDir={rootDir}
                   docUrlBuilder={(relPath) => docUrl(detail.info.paper_id, relPath, dataRootDir || rootDir)}

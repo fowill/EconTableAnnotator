@@ -112,6 +112,18 @@ export async function fetchPaperContext(paperId: string, rootDir: string): Promi
   return res.json();
 }
 
+export async function refreshPaperColumns(paperId: string, rootDir: string): Promise<string[]> {
+  const res = await fetch(withRoot(`/api/paper/${paperId}/refresh_columns`, rootDir), {
+    method: "POST"
+  });
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(msg || "刷新列名失败");
+  }
+  const data = await res.json();
+  return data.columns || [];
+}
+
 export function docUrl(paperId: string, relativePath: string, rootDir: string): string {
   const encoded = encodeURIComponent(relativePath);
   return withRoot(`/api/paper/${paperId}/doc?path=${encoded}`, rootDir);

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import useDragScroll from "../hooks/useDragScroll";
-import { SkeletonModel, TableDetail, PaperContext } from "../api";
+import { PaperContext, SkeletonModel, TableDetail } from "../api";
 
 type XRow = SkeletonModel["x_rows"][number];
 type YCol = SkeletonModel["y_columns"][number];
@@ -34,6 +34,7 @@ type Props = {
   skeletonDraft: SkeletonModel | null;
   updateSkeleton: (u: (s: SkeletonModel) => SkeletonModel) => void;
   paperContext: PaperContext | null;
+  onRefreshColumns: () => void;
   docUrlBuilder: (relPath: string) => string;
 };
 
@@ -65,6 +66,7 @@ const EditTable = ({
   skeletonDraft,
   updateSkeleton,
   paperContext,
+  onRefreshColumns,
   docUrlBuilder
 }: Props) => {
   const editScroll = useDragScroll();
@@ -74,8 +76,8 @@ const EditTable = ({
   const headerCells = detail.grid.header.map((_, idx) => {
     const isRowCol = idx === 0;
     const isLabelCol = idx === 1;
-    const isDataCol = idx > 1; // numeric columns start after label
-    const colNum = idx - 1; // c1 corresponds to idx=2
+    const isDataCol = idx > 1;
+    const colNum = idx - 1; // c1 starts at header index 2
     const displayName = isRowCol ? "row" : isLabelCol ? "label" : `c${colNum}`;
     const active = isDataCol && isYCol(colNum);
     return (
@@ -90,7 +92,7 @@ const EditTable = ({
           if (!isDataCol) return;
           setMenu({ type: "col", index: idx, x: e.clientX, y: e.clientY });
         }}
-        title={idx === 0 ? "行号" : "点击标注/取消 Y 列，右键插入/删除列"}
+        title={isDataCol ? "点击切换 Y 列 / 右键插入/删除" : undefined}
       >
         <div className="col-header">
           {isDataCol && (
@@ -135,6 +137,8 @@ const EditTable = ({
     );
   });
 
+  const bracketOptions = ["t_stat", "std_err", "p_value", "unknown"] as const;
+
   return (
     <>
       {editMode ? (
@@ -150,13 +154,7 @@ const EditTable = ({
               onMouseUp={editScroll.onMouseUp}
               onMouseLeave={editScroll.onMouseLeave}
             >
-              <table
-                className="table annotate-table"
-                style={{
-                  width: "max-content",
-                  minWidth: "100%",
-                }}
-              >
+              <table className="table annotate-table" style={{ width: "max-content", minWidth: "100%" }}>
                 <thead>
                   <tr>{headerCells}</tr>
                 </thead>
@@ -201,7 +199,7 @@ const EditTable = ({
                                 <button
                                   className={`mini-btn ${obs ? "active" : ""}`}
                                   onClick={() => toggleObsRow(rowId, row[1] || "N")}
-                                  title="标注为 N/观测值 行"
+                                  title="标注为 N 行"
                                 >
                                   N
                                 </button>
@@ -212,10 +210,7 @@ const EditTable = ({
                             ) : (
                               <input
                                 className="cell-input"
-                                style={{
-                                  width: cidx === 1 ? 220 : 90,
-                                  minWidth: cidx === 1 ? 200 : 80,
-                                }}
+                                style={{ width: cidx === 1 ? 220 : 90, minWidth: cidx === 1 ? 200 : 80 }}
                                 value={cell}
                                 onChange={(e) => onCellChange(ridx, cidx, e.target.value)}
                               />
@@ -230,114 +225,10 @@ const EditTable = ({
             </div>
           </div>
 
-          <div className="card" style={{ marginTop: 10 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>X 行详情</div>
-            {skeletonDraft?.x_rows?.length ? (
-              <div style={{ marginBottom: 6, color: "#374151", fontSize: 13 }}>
-                已有 X 行：
-                {skeletonDraft.x_rows.map((r) => (
-                  <span
-                    key={r.row}
-                    style={{
-                      display: "inline-block",
-                      padding: "2px 6px",
-                      marginRight: 6,
-                      borderRadius: 6,
-                      background: "#ecfdf3",
-                      fontFamily: "monospace"
-                    }}
-                  >
-                    row{r.row}: {r.display_label || "-"} | {r.data_var_name || "unknown"}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            {skeletonDraft?.x_rows.map((r) => (
-              <div className="row" key={r.row} style={{ marginBottom: 8 }}>
-                <span style={{ width: 60 }}>Row {r.row}</span>
-                <input
-                  className="input slim"
-                  placeholder="display_label"
-                  value={r.display_label || ""}
-                  onChange={(e) => updateXField(r.row, "display_label", e.target.value)}
-                />
-                <input
-                  className="input slim"
-                  placeholder="data_var_name"
-                  value={r.data_var_name || ""}
-                  onChange={(e) => updateXField(r.row, "data_var_name", e.target.value)}
-                />
-                <select className="input slim" value={r.role} onChange={(e) => updateXField(r.row, "role", e.target.value)}>
-                  <option value="key">核心</option>
-                  <option value="control">控制变量</option>
-                  <option value="interaction">交互项</option>
-                  <option value="other">其他</option>
-                </select>
-              </div>
-            ))}
-          </div>
-
-          <div className="card" style={{ marginTop: 10 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Y 列标注</div>
-            {skeletonDraft?.y_columns?.length ? (
-              <div style={{ marginBottom: 6, color: "#374151", fontSize: 13 }}>
-                已有 Y 列：
-                {skeletonDraft.y_columns.map((c) => (
-                  <span
-                    key={c.col}
-                    style={{
-                      display: "inline-block",
-                      padding: "2px 6px",
-                      marginRight: 6,
-                      borderRadius: 6,
-                      background: "#eef2ff",
-                      fontFamily: "monospace"
-                    }}
-                  >
-                    c{c.col}: {c.depvar_label || "-"} | {c.depvar_data_name || "unknown"}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {detail.grid.header
-                .map((_, idx) => idx)
-                .filter((idx) => idx > 1)
-                .map((idx) => {
-                  const colNum = idx - 1;
-                  const active = isYCol(colNum);
-                  return (
-                    <div className="row" key={idx} style={{ alignItems: "flex-start", gap: 8 }}>
-                      <label style={{ minWidth: 60 }}>
-                        <input type="checkbox" checked={active} onChange={() => toggleYCol(colNum)} style={{ marginRight: 6 }} />
-                        列 c{colNum}
-                      </label>
-                      {active && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          <input
-                            className="input slim"
-                            placeholder="depvar_label（论文原文）"
-                            value={yCol(colNum)?.depvar_label || ""}
-                            onChange={(e) => updateYField(colNum, "depvar_label", e.target.value)}
-                          />
-                          <input
-                            className="input slim"
-                            placeholder="data_var_name（数据字段）"
-                            value={yCol(colNum)?.depvar_data_name || ""}
-                            onChange={(e) => updateYField(colNum, "depvar_data_name", e.target.value)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-
           {suggestedRows && (
             <div className="card" style={{ marginTop: 10 }}>
               <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ fontWeight: 700 }}>LLM 备选（未应用）</div>
+                <div style={{ fontWeight: 700 }}>LLM 建议（未应用）</div>
                 <div className="row" style={{ gap: 8 }}>
                   <button className="button secondary" onClick={acceptSuggest}>
                     应用
@@ -363,10 +254,10 @@ const EditTable = ({
             </div>
           )}
 
-          <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
-            <div style={{ fontWeight: 700 }}>括号含义</div>
-            {["t_stat", "std_err", "p_value", "unknown"].map((opt) => (
-              <label key={opt} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <div className="card" style={{ marginTop: 10 }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>括号含义</div>
+            {bracketOptions.map((opt) => (
+              <label key={opt} style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 8 }}>
                 <input
                   type="radio"
                   name="bracket"
@@ -397,7 +288,32 @@ const EditTable = ({
                     borderRadius: 6
                   }}
                 >
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>数据列名</div>
+                  {paperContext.columns.length === 0 ? (
+                    <div style={{ color: "#6b7280" }}>无列名</div>
+                  ) : (
+                    paperContext.columns.map((c, i) => (
+                      <div key={i} style={{ fontFamily: "monospace", fontSize: 12, marginBottom: 2 }}>
+                        {c}
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div
+                  style={{
+                    flex: 1,
+                    background: "#f9fafb",
+                    padding: 8,
+                    borderRadius: 6,
+                    border: "1px solid #e5e7eb",
+                    minHeight: 120
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600 }}>数据列名</span>
+                    <button className="button secondary" onClick={onRefreshColumns} style={{ padding: "2px 8px" }}>
+                      {paperContext.columns.length === 0 ? "获取列名" : "重新获取"}
+                    </button>
+                  </div>
                   {paperContext.columns.length === 0 ? (
                     <div style={{ color: "#6b7280" }}>无列名</div>
                   ) : (
@@ -440,13 +356,7 @@ const EditTable = ({
             onMouseUp={previewScroll.onMouseUp}
             onMouseLeave={previewScroll.onMouseLeave}
           >
-            <table
-              className="table"
-              style={{
-                width: "max-content",
-                minWidth: "100%"
-              }}
-            >
+            <table className="table" style={{ width: "max-content", minWidth: "100%" }}>
               <thead>
                 <tr>
                   {detail.grid.header.map((_, idx) => (
