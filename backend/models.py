@@ -29,6 +29,7 @@ class XRow(BaseModel):
 class FERow(BaseModel):
     row: int
     label: str
+    data_var_name: Optional[str] = None
     note: Optional[str] = None
 
 
@@ -75,4 +76,3 @@ class TableDetail(BaseModel):
     info: TableInfo
     grid: GridData
     skeleton: SkeletonModel
-

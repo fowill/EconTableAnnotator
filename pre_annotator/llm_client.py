@@ -121,7 +121,7 @@ Expected skeleton (partial):
         "- If panels are present (wp case), return multiple entries with distinct panel_id and grids; otherwise return a single grid/skeleton.\n"
         "- For each panel: reconstruct the grid (rows as arrays). First column is row_id (1-based).\n"
         "- Provide skeleton JSON per panel: y_columns, x_rows, fe_rows, obs_rows, bracket_type_default.\n"
-        "- CRUCIAL: For every y_column and x_row, fill data_var_name based on regression code and dataset column names. Do NOT leave blank; if impossible, set 'unknown'. Consider interactions (x*y), lags, prefixes, case/underscore variants.\n"
+        "- CRUCIAL: For every y_column, x_row, and fe_row, fill data_var_name based on regression code and dataset column names (fixed effects often shown in code like absorb(industry), i(industry_year), fevar etc.). Do NOT leave blank; if impossible, set 'unknown'. Consider interactions (x*y), lags, prefixes, case/underscore variants.\n"
         "- Match depvar_label / display labels from the table text. Keep numbers/asterisks/brackets exactly.\n"
         f"Paper id: {paper_id}, table id: {table_id}.\n"
         f"Candidate dataset columns (full): {', '.join(col_list)}\n"
@@ -130,7 +130,7 @@ Expected skeleton (partial):
         "Return pure JSON. Preferred structure:\n"
         "{ \"panels\": [ {\"panel_id\":\"A\",\"grid\": [...], \"skeleton\": {...}}, ... ] }\n"
         "If single panel, you may return {\"grid\": [...], \"skeleton\": {...}}.\n"
-        "Skeleton fields: paper_id, table_id, grid_file, image_file, panel_id (if any), status, bracket_type_default, y_columns[{col,depvar_label,depvar_data_name,note}], x_rows[{row,display_label,data_var_name,role,note}], fe_rows[{row,label,note}], obs_rows[{row,label,note}], notes{rows,cols,cells}, last_modified.\n"
+        "Skeleton fields: paper_id, table_id, grid_file, image_file, panel_id (if any), status, bracket_type_default, y_columns[{col,depvar_label,depvar_data_name,note}], x_rows[{row,display_label,data_var_name,role,note}], fe_rows[{row,label,data_var_name,note}], obs_rows[{row,label,note}], notes{rows,cols,cells}, last_modified.\n"
         "\nReference format example:\n"
         + example_block
     )

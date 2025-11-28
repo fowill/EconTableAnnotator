@@ -271,7 +271,7 @@ function App() {
       if (exists) {
         s.fe_rows = s.fe_rows.filter((r) => r.row !== row);
       } else {
-        s.fe_rows.push({ row, label, note: "" });
+        s.fe_rows.push({ row, label, data_var_name: "", note: "" });
       }
       return s;
     });

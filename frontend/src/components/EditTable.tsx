@@ -274,6 +274,47 @@ const EditTable = ({
             ))}
           </div>
 
+          {skeletonDraft?.fe_rows && (
+            <div className="card" style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>FE 行标注</div>
+              {skeletonDraft.fe_rows.length === 0 && <div style={{ color: "#6b7280" }}>暂无 FE 行</div>}
+              {skeletonDraft.fe_rows.map((fe) => (
+                <div className="row" key={fe.row} style={{ alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ minWidth: 60 }}>Row {fe.row}</span>
+                  <input
+                    className="input slim"
+                    placeholder="label"
+                    value={fe.label || ""}
+                    onChange={(e) =>
+                      updateSkeleton((s) => {
+                        s.fe_rows = s.fe_rows.map((r) =>
+                          r.row === fe.row ? { ...r, label: e.target.value } : r
+                        );
+                        return s;
+                      })
+                    }
+                  />
+                  <input
+                    className="input slim"
+                    placeholder="data_var_name"
+                    value={fe.data_var_name || ""}
+                    onChange={(e) =>
+                      updateSkeleton((s) => {
+                        s.fe_rows = s.fe_rows.map((r) =>
+                          r.row === fe.row ? { ...r, data_var_name: e.target.value } : r
+                        );
+                        return s;
+                      })
+                    }
+                  />
+                  <button className="button secondary" onClick={() => toggleFERow(fe.row, fe.label || "FE")}>
+                    取消 FE
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {paperContext && (
             <div className="card" style={{ marginTop: 10 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>参考信息</div>
