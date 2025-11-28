@@ -121,7 +121,7 @@ Expected skeleton (partial):
         "- If panels are present (wp case), return multiple entries with distinct panel_id and grids; otherwise return a single grid/skeleton.\n"
         "- For each panel: reconstruct the grid (rows as arrays). First column is row_id (1-based).\n"
         "- Provide skeleton JSON per panel: y_columns, x_rows, fe_rows, obs_rows, bracket_type_default.\n"
-        "- CRUCIAL: For every y_column, x_row, and fe_row, fill data_var_name based on regression code and dataset column names (fixed effects often shown in code like absorb(industry), i(industry_year), fevar etc.). Do NOT leave blank; if impossible, set 'unknown'. Consider interactions (x*y), lags, prefixes, case/underscore variants.\n"
+        "- CRUCIAL: For every y_column, x_row, and fe_row, fill data_var_name based on regression code and dataset column names. Use the actual variable names in the regression code (e.g., reghdfe absorb(), i(var)#t, l.var) to map to dataset columns. Fixed effects often appear as absorb(industry), i(industry_year), fevar, etc. Do NOT leave blank; if impossible, set 'unknown'. Consider interactions (x*y), lags, prefixes, case/underscore variants.\n"
         "- Match depvar_label / display labels from the table text. Keep numbers/asterisks/brackets exactly.\n"
         f"Paper id: {paper_id}, table id: {table_id}.\n"
         f"Candidate dataset columns (full): {', '.join(col_list)}\n"
